@@ -12,9 +12,9 @@ local WoWClassicEra = (WOW_PROJECT_ID == WOW_PROJECT_CLASSIC)
 local WoWBCC = (WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC)
 local WoWClassic = (WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE)
 local WoWRetail = (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE)
-local SaveBindings = SaveBindings or AttemptToSaveBindings
+local function SaveBindings(...) return (_G.SaveBindings or _G.AttemptToSaveBindings)(...) end
 
--- GLOBALS: LibStub, UnitHasVehicleUI, GetModifiedClick, SetModifiedClick, SaveBindings, GetCurrentBindingSet, InCombatLockdown
+-- GLOBALS: LibStub, UnitHasVehicleUI, GetModifiedClick, SetModifiedClick, SaveBindings, AttemptToSaveBindings, LoadBindings, GetCurrentBindingSet, InCombatLockdown
 
 local getFunc, setFunc
 do
@@ -94,11 +94,28 @@ local function generateOptions()
 				order = 5,
 				type = "toggle",
 				name = "Character Specific Keybinds",
-				desc = "Use character-specific keybindings for this character instead of the account-wide keybindings.",
+				desc = "Use character-specific keybindings for this character instead of the account-wide keybindings.\n\nThe first time you switch this on, your current account bindings are copied to the character set so you don't start from scratch.",
 				width = "full",
+				disabled = InCombatLockdown,
 				get = function() return (GetCurrentBindingSet() or 1) == 2 end,
 				set = function(info, value)
-					SaveBindings(value and 2 or 1)
+					if InCombatLockdown() then return end
+					if value and not Bartender4.db.char.charBindingsInitialized then
+						-- First-time activation: snapshot the current (account) bindings
+						-- into set 2 so the user doesn't start from an empty slate. The
+						-- resulting UPDATE_BINDINGS will mark the char as initialized;
+						-- set it here too as defense-in-depth in case the event chain
+						-- doesn't fire as expected on some client/version.
+						SaveBindings(2)
+						Bartender4.db.char.charBindingsInitialized = true
+					else
+						local which = value and 2 or 1
+						-- Load first so any pre-existing bindings for that set are restored,
+						-- then Save to make the set active. Calling Save alone would
+						-- overwrite the target set with the currently-active bindings.
+						LoadBindings(which)
+						SaveBindings(which)
+					end
 					LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
 				end,
 			},
@@ -122,15 +139,10 @@ local function generateOptions()
 						width = "full",
 						get = function()
 							local source = Bartender4.db.profile.keybindCopySource
-							if source then
-								local KC = Bartender4:GetModule("KeyBindCopy", true)
-								local chars = KC and KC:GetAvailableCharacters() or {}
-								if not chars[source] then
-									Bartender4.db.profile.keybindCopySource = nil
-									return nil
-								end
-							end
-							return source
+							if not source then return nil end
+							local KC = Bartender4:GetModule("KeyBindCopy", true)
+							local chars = KC and KC:GetAvailableCharacters() or {}
+							return chars[source] and source or nil
 						end,
 						set = function(info, value) Bartender4.db.profile.keybindCopySource = value end,
 						values = function()
@@ -143,15 +155,19 @@ local function generateOptions()
 						type = "execute",
 						name = "Copy Keybinds",
 						desc = "Copy keybindings from the selected character. This will overwrite your current Bartender4 keybindings.",
-						disabled = function() return not Bartender4.db.profile.keybindCopySource end,
+						disabled = function()
+							return not Bartender4.db.profile.keybindCopySource or InCombatLockdown()
+						end,
 						func = function()
 							local KC = Bartender4:GetModule("KeyBindCopy", true)
 							local source = Bartender4.db.profile.keybindCopySource
 							if KC and source then
 								if KC:CopyBindingsFrom(source) then
 									Bartender4:Print(("Keybindings copied from %s."):format(source))
+									Bartender4.db.profile.keybindCopySource = nil
+								else
+									Bartender4:Print(("Could not copy keybindings from %s."):format(source))
 								end
-								Bartender4.db.profile.keybindCopySource = nil
 								LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
 							end
 						end,

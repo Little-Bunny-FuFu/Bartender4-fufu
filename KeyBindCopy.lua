@@ -5,15 +5,18 @@
 local _, Bartender4 = ...
 local BT4KC = Bartender4:NewModule("KeyBindCopy", "AceEvent-3.0")
 
--- GLOBALS: Bartender4DB, UnitName, GetRealmName, GetBindingKey, SetBinding, SaveBindings, GetCurrentBindingSet, InCombatLockdown
+-- GLOBALS: Bartender4DB, UnitName, GetRealmName, GetBindingKey, SetBinding, SaveBindings, AttemptToSaveBindings, GetCurrentBindingSet, InCombatLockdown
 
 local _G = _G
-local select, pairs, ipairs, next = select, pairs, ipairs, next
+local pairs, ipairs, next = pairs, ipairs, next
 local GetBindingKey = GetBindingKey
 local SetBinding = SetBinding
-local SaveBindings = SaveBindings or AttemptToSaveBindings
 local GetCurrentBindingSet = GetCurrentBindingSet
 
+-- Resolve at call time so a runtime replacement of the API is honored.
+local function SaveBindings(...) return (_G.SaveBindings or _G.AttemptToSaveBindings)(...) end
+
+-- Memoized for the session; LIST_ACTIONBARS is fixed at addon load.
 local s_allBindingActions = nil
 local function GetAllBT4BindingActions()
 	if s_allBindingActions then return s_allBindingActions end
@@ -38,6 +41,13 @@ function BT4KC:OnEnable()
 end
 
 function BT4KC:SaveCurrentBindings()
+	-- Any time we observe set 2 active, mark the character as initialized so
+	-- a future toggle ON via our UI won't clobber pre-existing bindings (set
+	-- up either at login, via Blizzard's UI, or via our own first-time copy).
+	if (GetCurrentBindingSet() or 1) == 2 then
+		Bartender4.db.char.charBindingsInitialized = true
+	end
+
 	local saved = {}
 	for _, action in ipairs(GetAllBT4BindingActions()) do
 		local keys = { GetBindingKey(action) }

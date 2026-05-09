@@ -43,6 +43,7 @@ local defaults = {
 	},
 	char = {
 		savedBindings = {},
+		charBindingsInitialized = false,
 	},
 }
 
