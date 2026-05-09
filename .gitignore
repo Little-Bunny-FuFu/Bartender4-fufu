@@ -1,0 +1,21 @@
+# Embedded libraries (copied from local install, not tracked in git)
+libs/AceAddon-3.0/
+libs/AceConfig-3.0/
+libs/AceConsole-3.0/
+libs/AceDB-3.0/
+libs/AceDBOptions-3.0/
+libs/AceEvent-3.0/
+libs/AceGUI-3.0/
+libs/AceGUI-3.0-SharedMediaWidgets/
+libs/AceHook-3.0/
+libs/AceLocale-3.0/
+libs/CallbackHandler-1.0/
+libs/LibActionButton-1.0/
+libs/LibButtonGlow-1.0/
+libs/LibClassicSpellActionCount-1.0/
+libs/LibDBIcon-1.0/
+libs/LibDualSpec-1.0/
+libs/LibKeyBound-1.0/
+libs/LibSharedMedia-3.0/
+libs/LibStub/
+libs/LibWindow-1.1/
