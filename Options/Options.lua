@@ -93,8 +93,8 @@ local function generateOptions()
 			charspecbindings = {
 				order = 5,
 				type = "toggle",
-				name = "Character Specific Keybinds",
-				desc = "Use character-specific keybindings for this character instead of the account-wide keybindings.\n\nThe first time you switch this on, your current account bindings are copied to the character set so you don't start from scratch.",
+				name = L["Character Specific Keybinds"],
+				desc = L["Use character-specific keybindings for this character instead of the account-wide keybindings.\n\nThe first time you switch this on, your current account bindings are copied to the character set so you don't start from scratch."],
 				width = "full",
 				disabled = InCombatLockdown,
 				get = function() return (GetCurrentBindingSet() or 1) == 2 end,
@@ -122,20 +122,20 @@ local function generateOptions()
 			copybindings = {
 				order = 6,
 				type = "group",
-				name = "Copy Keybinds from Character",
+				name = L["Copy Keybinds from Character"],
 				guiInline = true,
 				hidden = function() return (GetCurrentBindingSet() or 1) ~= 2 end,
 				args = {
 					note = {
 						order = 1,
 						type = "description",
-						name = "Copy Bartender4 keybindings from another character. The source character must have logged in at least once with this version of Bartender4.\n",
+						name = L["Copy Bartender4 keybindings from another character. The source character must have logged in at least once with this version of Bartender4.\n"],
 					},
 					source = {
 						order = 2,
 						type = "select",
-						name = "Source Character",
-						desc = "Select the character to copy keybindings from.",
+						name = L["Source Character"],
+						desc = L["Select the character to copy keybindings from."],
 						width = "full",
 						get = function()
 							local source = Bartender4.db.profile.keybindCopySource
@@ -153,8 +153,8 @@ local function generateOptions()
 					copy = {
 						order = 3,
 						type = "execute",
-						name = "Copy Keybinds",
-						desc = "Copy keybindings from the selected character. This will overwrite your current Bartender4 keybindings.",
+						name = L["Copy Keybinds"],
+						desc = L["Copy keybindings from the selected character. This will overwrite your current Bartender4 keybindings."],
 						disabled = function()
 							return not Bartender4.db.profile.keybindCopySource or InCombatLockdown()
 						end,
@@ -163,10 +163,10 @@ local function generateOptions()
 							local source = Bartender4.db.profile.keybindCopySource
 							if KC and source then
 								if KC:CopyBindingsFrom(source) then
-									Bartender4:Print(("Keybindings copied from %s."):format(source))
+									Bartender4:Print((L["Keybindings copied from %s."]):format(source))
 									Bartender4.db.profile.keybindCopySource = nil
 								else
-									Bartender4:Print(("Could not copy keybindings from %s."):format(source))
+									Bartender4:Print((L["Could not copy keybindings from %s."]):format(source))
 								end
 								LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
 							end

@@ -16,12 +16,13 @@ local GetCurrentBindingSet = GetCurrentBindingSet
 -- Resolve at call time so a runtime replacement of the API is honored.
 local function SaveBindings(...) return (_G.SaveBindings or _G.AttemptToSaveBindings)(...) end
 
--- Memoized for the session; LIST_ACTIONBARS is fixed at addon load.
 local s_allBindingActions = nil
 local function GetAllBT4BindingActions()
 	if s_allBindingActions then return s_allBindingActions end
 	local actions = {}
 	local ActionBarsMod = Bartender4:GetModule("ActionBars")
+	
+	-- 1. Custom Bartender4 Keybinds
 	for _, i in ipairs(ActionBarsMod.LIST_ACTIONBARS) do
 		for k = 1, 12 do
 			actions[#actions + 1] = ("CLICK BT4Button%d:Keybind"):format(((i-1)*12)+k)
@@ -31,6 +32,30 @@ local function GetAllBT4BindingActions()
 		actions[#actions + 1] = ("CLICK BT4PetButton%d:LeftButton"):format(k)
 		actions[#actions + 1] = ("CLICK BT4StanceButton%d:LeftButton"):format(k)
 	end
+
+	-- 2. Blizzard Default Bindings that Bartender4 intercepts (e.g. Bar 3 is MULTIACTIONBAR3)
+	local BLIZZ_MAPPINGS = {
+		[1] = "ACTIONBUTTON%d",
+		[3] = "MULTIACTIONBAR3BUTTON%d",
+		[4] = "MULTIACTIONBAR4BUTTON%d",
+		[5] = "MULTIACTIONBAR2BUTTON%d",
+		[6] = "MULTIACTIONBAR1BUTTON%d",
+		[13] = "MULTIACTIONBAR5BUTTON%d",
+		[14] = "MULTIACTIONBAR6BUTTON%d",
+		[15] = "MULTIACTIONBAR7BUTTON%d",
+	}
+	for _, i in ipairs(ActionBarsMod.LIST_ACTIONBARS) do
+		if BLIZZ_MAPPINGS[i] then
+			for k = 1, 12 do
+				actions[#actions + 1] = BLIZZ_MAPPINGS[i]:format(k)
+			end
+		end
+	end
+	for k = 1, 10 do
+		actions[#actions + 1] = ("BONUSACTIONBUTTON%d"):format(k) -- Pet Bar
+		actions[#actions + 1] = ("SHAPESHIFTBUTTON%d"):format(k) -- Stance Bar
+	end
+
 	s_allBindingActions = actions
 	return actions
 end
@@ -77,15 +102,23 @@ function BT4KC:GetAvailableCharacters()
 end
 
 function BT4KC:CopyBindingsFrom(charKey)
+	local L = LibStub("AceLocale-3.0"):GetLocale("Bartender4")
 	if InCombatLockdown() then
-		Bartender4:Print("Cannot copy keybindings during combat.")
+		Bartender4:Print(L["Cannot copy keybindings during combat."])
 		return false
 	end
 
 	local rawDB = _G["Bartender4DB"]
-	if not rawDB or not rawDB.char or not rawDB.char[charKey] then return false end
+	if not rawDB or not rawDB.char or not rawDB.char[charKey] then
+		Bartender4:Print(L["Error: Character data not found for %s."]:format(charKey))
+		return false
+	end
+	
 	local bindings = rawDB.char[charKey].savedBindings
-	if not bindings then return false end
+	if not bindings then
+		Bartender4:Print(L["Error: No saved bindings found for %s."]:format(charKey))
+		return false
+	end
 
 	-- Clear existing BT4 bindings
 	for _, action in ipairs(GetAllBT4BindingActions()) do
