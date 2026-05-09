@@ -1,6 +1,6 @@
 ## Interface: 120001,11508,50503,20505
 
-## Title: Bartender4 (fufu)
+## Title: Bartender4-fufu
 ## Notes: Bartender4 fork with character keybind copy support
 ## IconTexture: Interface\Icons\INV_Drink_05
 
