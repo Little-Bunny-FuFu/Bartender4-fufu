@@ -1,16 +1,16 @@
 ## Interface: 120001,11508,50503,20505
 
-## Title: Bartender4
-## Notes: Simple and Advanced combined - Bartender4 ActionBar AddOn
+## Title: Bartender4 (fufu)
+## Notes: Bartender4 fork with character keybind copy support
 ## IconTexture: Interface\Icons\INV_Drink_05
 
 ## Version: @project-version@
 
-## Author: Nevcairiel
-## X-Email: h.leppkes at gmail dot com
+## Author: Little-Bunny-FuFu
+## X-Email: fufu@fufutopia.com
 
 ## X-Category: Action Bars
-## X-Website: https://www.wowace.com/projects/bartender4/
+## X-Website: https://github.com/Little-Bunny-FuFu/Bartender4-fufu
 ## X-License: All rights reserved.
 ## X-Curse-Project-ID: 13501
 ## X-WoWI-ID: 11190
@@ -70,6 +70,7 @@ PetButton.lua
 
 ## Modules ##
 ActionBars.lua
+KeyBindCopy.lua
 BagBar.lua
 BagBarClassic.lua
 PetBar.lua

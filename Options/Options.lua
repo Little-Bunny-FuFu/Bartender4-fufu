@@ -90,6 +90,74 @@ local function generateOptions()
 					s_KeyBoundHookShowBTOptions = true
 				end,
 			},
+			charspecbindings = {
+				order = 5,
+				type = "toggle",
+				name = "Character Specific Keybinds",
+				desc = "Use character-specific keybindings for this character instead of the account-wide keybindings.",
+				width = "full",
+				get = function() return (GetCurrentBindingSet() or 1) == 2 end,
+				set = function(info, value)
+					SaveBindings(value and 2 or 1)
+					LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
+				end,
+			},
+			copybindings = {
+				order = 6,
+				type = "group",
+				name = "Copy Keybinds from Character",
+				guiInline = true,
+				hidden = function() return (GetCurrentBindingSet() or 1) ~= 2 end,
+				args = {
+					note = {
+						order = 1,
+						type = "description",
+						name = "Copy Bartender4 keybindings from another character. The source character must have logged in at least once with this version of Bartender4.\n",
+					},
+					source = {
+						order = 2,
+						type = "select",
+						name = "Source Character",
+						desc = "Select the character to copy keybindings from.",
+						width = "full",
+						get = function()
+							local source = Bartender4.db.profile.keybindCopySource
+							if source then
+								local KC = Bartender4:GetModule("KeyBindCopy", true)
+								local chars = KC and KC:GetAvailableCharacters() or {}
+								if not chars[source] then
+									Bartender4.db.profile.keybindCopySource = nil
+									return nil
+								end
+							end
+							return source
+						end,
+						set = function(info, value) Bartender4.db.profile.keybindCopySource = value end,
+						values = function()
+							local KC = Bartender4:GetModule("KeyBindCopy", true)
+							return KC and KC:GetAvailableCharacters() or {}
+						end,
+					},
+					copy = {
+						order = 3,
+						type = "execute",
+						name = "Copy Keybinds",
+						desc = "Copy keybindings from the selected character. This will overwrite your current Bartender4 keybindings.",
+						disabled = function() return not Bartender4.db.profile.keybindCopySource end,
+						func = function()
+							local KC = Bartender4:GetModule("KeyBindCopy", true)
+							local source = Bartender4.db.profile.keybindCopySource
+							if KC and source then
+								if KC:CopyBindingsFrom(source) then
+									Bartender4:Print(("Keybindings copied from %s."):format(source))
+								end
+								Bartender4.db.profile.keybindCopySource = nil
+								LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
+							end
+						end,
+					},
+				},
+			},
 			bars = {
 				order = 20,
 				type = "group",

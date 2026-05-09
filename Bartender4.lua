@@ -38,8 +38,12 @@ local defaults = {
 		flyoutBackground = true,
 		spellCastVFX = true,
 		minimapIcon = {},
-		mouseovermod = "NONE"
-	}
+		mouseovermod = "NONE",
+		keybindCopySource = nil,
+	},
+	char = {
+		savedBindings = {},
+	},
 }
 
 Bartender4.CONFIG_VERSION = 3
