@@ -106,6 +106,28 @@ local function generateOptions()
 						-- resulting UPDATE_BINDINGS will mark the char as initialized;
 						-- set it here too as defense-in-depth in case the event chain
 						-- doesn't fire as expected on some client/version.
+						
+						-- In modern WoW, calling SaveBindings(2) from set 1 doesn't 
+						-- correctly set the active profile, nor does it always copy correctly.
+						-- We manually copy bindings, then switch to set 2 and save.
+						local currentBindings = {}
+						for i = 1, GetNumBindings() do
+							local command, _, key1, key2 = GetBinding(i)
+							if command then
+								currentBindings[command] = {key1, key2}
+							end
+						end
+						
+						LoadBindings(2)
+						
+						for command, keys in pairs(currentBindings) do
+							for _, key in ipairs(keys) do
+								if key and key ~= "" then
+									SetBinding(key, command)
+								end
+							end
+						end
+						
 						SaveBindings(2)
 						Bartender4.db.char.charBindingsInitialized = true
 					else
