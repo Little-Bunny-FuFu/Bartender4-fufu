@@ -3,6 +3,30 @@
 	All rights reserved.
 ]]
 local _, Bartender4 = ...
+
+-- Conflict detection: Bartender4-fufu is a full replacement for Bartender4.
+-- Both cannot be loaded at the same time because they share the same AceAddon
+-- name, SavedVariables, and secure frame names.
+do
+	local isOriginalLoaded = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Bartender4")
+	if not isOriginalLoaded and IsAddOnLoaded then
+		isOriginalLoaded = IsAddOnLoaded("Bartender4")
+	end
+	if isOriginalLoaded then
+		C_Timer.After(5, function()
+			local msg = "|cffff0000Bartender4-fufu ERROR:|r The original |cffffd200Bartender4|r addon is also enabled. " ..
+				"Bartender4-fufu is a replacement and cannot run alongside it. " ..
+				"Please disable the original |cffffd200Bartender4|r in your AddOns list and reload your UI (/reload)."
+			print(msg)
+			-- Also show in the UIErrorsFrame for high visibility
+			if UIErrorsFrame then
+				UIErrorsFrame:AddMessage(msg, 1.0, 0.0, 0.0, 1.0, 5)
+			end
+		end)
+		return -- Abort loading entirely
+	end
+end
+
 Bartender4 = LibStub("AceAddon-3.0"):NewAddon(Bartender4, "Bartender4", "AceConsole-3.0", "AceEvent-3.0", "AceHook-3.0")
 _G.Bartender4 = Bartender4
 
