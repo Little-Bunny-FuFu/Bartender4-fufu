@@ -4,7 +4,7 @@
 ## Notes: Bartender4 fork with character keybind copy support
 ## IconTexture: Interface\Icons\INV_Drink_05
 
-## Version: @project-version@
+## Version: 4.16.4-fufu
 
 ## Author: Little-Bunny-FuFu
 ## X-Email: fufu@fufutopia.com
