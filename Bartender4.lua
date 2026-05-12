@@ -13,10 +13,14 @@ do
 		isOriginalLoaded = IsAddOnLoaded("Bartender4")
 	end
 	if isOriginalLoaded then
+		local disableAddOn = (C_AddOns and C_AddOns.DisableAddOn) or DisableAddOn
+		if disableAddOn then
+			disableAddOn("Bartender4-fufu")
+		end
+
 		C_Timer.After(5, function()
 			local msg = "|cffff0000Bartender4-fufu ERROR:|r The original |cffffd200Bartender4|r addon is also enabled. " ..
-				"Bartender4-fufu is a replacement and cannot run alongside it. " ..
-				"Please disable the original |cffffd200Bartender4|r in your AddOns list and reload your UI (/reload)."
+				"Bartender4-fufu has been disabled to prevent conflicts. Please /reload your UI."
 			print(msg)
 			-- Also show in the UIErrorsFrame for high visibility
 			if UIErrorsFrame then

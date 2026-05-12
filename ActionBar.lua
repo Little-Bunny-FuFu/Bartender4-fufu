@@ -191,21 +191,22 @@ local UpdateSmartTarget = [[
 ]]
 
 function ActionBar:SetupSmartTarget()
-	local s = [[
+	local s_tbl = { [[
 		BT_Spell_Overrides = newtable()
 		BT_Spell_Overrides[16979] = 102401 -- wild charge (bear)
 		BT_Spell_Overrides[49376] = 102401 -- wild charge (cat)
-	]]
+	]] }
 
+	local useOldSpellAPI = not (C_SpellBook and C_SpellBook.GetSpellBookItemType)
 	local i = 1
 	local subtype, action, spellId = GetSpellBookItemInfo(i, "spell")
 	while subtype do
 		if subtype == "SPELL" then
-			if not (C_SpellBook and C_SpellBook.GetSpellBookItemType) then
+			if useOldSpellAPI then
 				spellId = select(7, GetSpellInfo(i, "spell"))
 			end
 			if spellId and spellId ~= action then
-				s = s .. "\n" .. ([[ BT_Spell_Overrides[%d] = %d ]]):format(spellId, action)
+				s_tbl[#s_tbl+1] = format(" BT_Spell_Overrides[%d] = %d ", spellId, action)
 			end
 		end
 
@@ -213,7 +214,7 @@ function ActionBar:SetupSmartTarget()
 		subtype, action, spellId = GetSpellBookItemInfo(i, "spell")
 	end
 
-	self:Execute(s)
+	self:Execute(table.concat(s_tbl, "\n"))
 
 	self:SetAttribute("ChildUpdateSmartTarget", UpdateSmartTarget)
 end

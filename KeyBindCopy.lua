@@ -21,12 +21,11 @@ local function SaveBindings(...) return (_G.SaveBindings or _G.AttemptToSaveBind
 
 -- Static Popup for safety
 StaticPopupDialogs["BARTENDER4_CONFIRM_KEYBIND_COPY"] = {
-	text = "", -- Set dynamically
+	text = L["Are you sure you want to overwrite your current keybindings with those from %s? This cannot be undone."],
 	button1 = _G.YES,
 	button2 = _G.NO,
 	OnAccept = function(self, data)
 		if BT4KC:CopyBindingsFrom(data) then
-			local L = LibStub("AceLocale-3.0"):GetLocale("Bartender4")
 			Bartender4:Print((L["Keybindings copied from %s."]):format(data))
 			Bartender4.db.profile.keybindCopySource = nil
 			LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
@@ -83,6 +82,7 @@ end
 
 function BT4KC:OnEnable()
 	self:RegisterEvent("UPDATE_BINDINGS", "SaveCurrentBindings")
+	self:RegisterEvent("PLAYER_LOGOUT", "DoSaveCurrentBindings")
 	self:SaveCurrentBindings()
 end
 
@@ -99,6 +99,15 @@ local function tCompare(t1, t2)
 end
 
 function BT4KC:SaveCurrentBindings()
+	if self._savePending then return end
+	self._savePending = true
+	C_Timer.After(0.5, function()
+		self._savePending = nil
+		self:DoSaveCurrentBindings()
+	end)
+end
+
+function BT4KC:DoSaveCurrentBindings()
 	-- Any time we observe set 2 active, mark the character as initialized so
 	-- a future toggle ON via our UI won't clobber pre-existing bindings (set
 	-- up either at login, via Blizzard's UI, or via our own first-time copy).
@@ -108,9 +117,9 @@ function BT4KC:SaveCurrentBindings()
 
 	local saved = {}
 	for _, action in ipairs(GetAllBT4BindingActions()) do
-		local keys = { GetBindingKey(action) }
-		if #keys > 0 then
-			saved[action] = keys
+		local k1, k2, k3, k4 = GetBindingKey(action)
+		if k1 then
+			saved[action] = { k1, k2, k3, k4 }
 		end
 	end
 	
@@ -124,10 +133,7 @@ function BT4KC:GetCurrentCharKey()
 	return UnitName("player") .. " - " .. GetRealmName()
 end
 
-local s_charCache = nil
 function BT4KC:GetAvailableCharacters()
-	if s_charCache then return s_charCache end
-	
 	local rawDB = _G["Bartender4DB"]
 	local chars = {}
 	if rawDB and rawDB.char then
@@ -138,7 +144,6 @@ function BT4KC:GetAvailableCharacters()
 			end
 		end
 	end
-	s_charCache = chars
 	return chars
 end
 
@@ -224,9 +229,7 @@ function BT4KC:SetupOptions()
 					func = function()
 						local source = Bartender4.db.profile.keybindCopySource
 						if source then
-							local popup = StaticPopupDialogs["BARTENDER4_CONFIRM_KEYBIND_COPY"]
-							popup.text = L["Are you sure you want to overwrite your current keybindings with those from %s? This cannot be undone."]:format(source)
-							StaticPopup_Show("BARTENDER4_CONFIRM_KEYBIND_COPY", nil, nil, source)
+							StaticPopup_Show("BARTENDER4_CONFIRM_KEYBIND_COPY", source, nil, source)
 						end
 					end,
 				},
