@@ -6,15 +6,36 @@ local _, Bartender4 = ...
 local BT4KC = Bartender4:NewModule("KeyBindCopy", "AceEvent-3.0")
 
 -- GLOBALS: Bartender4DB, UnitName, GetRealmName, GetBindingKey, SetBinding, SaveBindings, AttemptToSaveBindings, GetCurrentBindingSet, InCombatLockdown
+-- GLOBALS: StaticPopupDialogs, StaticPopup_Show, GetCurrentBindingSet
 
 local _G = _G
-local pairs, ipairs, next = pairs, ipairs, next
+local pairs, ipairs, next, type = pairs, ipairs, next, type
+local format = string.format
 local GetBindingKey = GetBindingKey
 local SetBinding = SetBinding
 local GetCurrentBindingSet = GetCurrentBindingSet
+local InCombatLockdown = InCombatLockdown
 
 -- Resolve at call time so a runtime replacement of the API is honored.
 local function SaveBindings(...) return (_G.SaveBindings or _G.AttemptToSaveBindings)(...) end
+
+-- Static Popup for safety
+StaticPopupDialogs["BARTENDER4_CONFIRM_KEYBIND_COPY"] = {
+	text = "", -- Set dynamically
+	button1 = _G.YES,
+	button2 = _G.NO,
+	OnAccept = function(self, data)
+		if BT4KC:CopyBindingsFrom(data) then
+			local L = LibStub("AceLocale-3.0"):GetLocale("Bartender4")
+			Bartender4:Print((L["Keybindings copied from %s."]):format(data))
+			Bartender4.db.profile.keybindCopySource = nil
+			LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
+		end
+	end,
+	timeout = 0,
+	whileDead = true,
+	hideOnEscape = true,
+}
 
 local s_allBindingActions = nil
 local function GetAllBT4BindingActions()
@@ -65,6 +86,18 @@ function BT4KC:OnEnable()
 	self:SaveCurrentBindings()
 end
 
+local function tCompare(t1, t2)
+	if type(t1) ~= type(t2) then return false end
+	if type(t1) ~= "table" then return t1 == t2 end
+	for k, v in pairs(t1) do
+		if not tCompare(v, t2[k]) then return false end
+	end
+	for k in pairs(t2) do
+		if t1[k] == nil then return false end
+	end
+	return true
+end
+
 function BT4KC:SaveCurrentBindings()
 	-- Any time we observe set 2 active, mark the character as initialized so
 	-- a future toggle ON via our UI won't clobber pre-existing bindings (set
@@ -80,14 +113,21 @@ function BT4KC:SaveCurrentBindings()
 			saved[action] = keys
 		end
 	end
-	Bartender4.db.char.savedBindings = saved
+	
+	-- Change detection: only update if data is different to avoid excessive SavedVariables churn
+	if not tCompare(saved, Bartender4.db.char.savedBindings) then
+		Bartender4.db.char.savedBindings = saved
+	end
 end
 
 function BT4KC:GetCurrentCharKey()
 	return UnitName("player") .. " - " .. GetRealmName()
 end
 
+local s_charCache = nil
 function BT4KC:GetAvailableCharacters()
+	if s_charCache then return s_charCache end
+	
 	local rawDB = _G["Bartender4DB"]
 	local chars = {}
 	if rawDB and rawDB.char then
@@ -98,6 +138,7 @@ function BT4KC:GetAvailableCharacters()
 			end
 		end
 	end
+	s_charCache = chars
 	return chars
 end
 
@@ -139,4 +180,58 @@ function BT4KC:CopyBindingsFrom(charKey)
 
 	SaveBindings(GetCurrentBindingSet() or 1)
 	return true
+end
+
+function BT4KC:SetupOptions()
+	if not self.options then
+		local L = LibStub("AceLocale-3.0"):GetLocale("Bartender4")
+		self.options = {
+			type = "group",
+			name = L["Copy Keybinds from Character"],
+			guiInline = true,
+			hidden = function() return (GetCurrentBindingSet() or 1) ~= 2 end,
+			args = {
+				note = {
+					order = 1,
+					type = "description",
+					name = L["Copy Bartender4 keybindings from another character. The source character must have logged in at least once with this version of Bartender4.\n"],
+				},
+				source = {
+					order = 2,
+					type = "select",
+					name = L["Source Character"],
+					desc = L["Select the character to copy keybindings from."],
+					width = "full",
+					get = function()
+						local source = Bartender4.db.profile.keybindCopySource
+						if not source then return nil end
+						local chars = self:GetAvailableCharacters()
+						return chars[source] and source or nil
+					end,
+					set = function(info, value) Bartender4.db.profile.keybindCopySource = value end,
+					values = function()
+						return self:GetAvailableCharacters()
+					end,
+				},
+				copy = {
+					order = 3,
+					type = "execute",
+					name = L["Copy Keybinds"],
+					desc = L["Copy keybindings from the selected character. This will overwrite your current Bartender4 keybindings."],
+					disabled = function()
+						return not Bartender4.db.profile.keybindCopySource or InCombatLockdown()
+					end,
+					func = function()
+						local source = Bartender4.db.profile.keybindCopySource
+						if source then
+							local popup = StaticPopupDialogs["BARTENDER4_CONFIRM_KEYBIND_COPY"]
+							popup.text = L["Are you sure you want to overwrite your current keybindings with those from %s? This cannot be undone."]:format(source)
+							StaticPopup_Show("BARTENDER4_CONFIRM_KEYBIND_COPY", nil, nil, source)
+						end
+					end,
+				},
+			},
+		}
+	end
+	Bartender4:RegisterModuleOptions("KeyBindCopy", self.options)
 end
