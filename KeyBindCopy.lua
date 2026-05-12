@@ -84,7 +84,7 @@ end
 
 function BT4KC:OnEnable()
 	self:RegisterEvent("UPDATE_BINDINGS", "SaveCurrentBindings")
-	self:RegisterEvent("PLAYER_LOGOUT", "DoSaveCurrentBindings")
+	self:RegisterEvent("PLAYER_LOGOUT", "OnPlayerLogout")
 	self:SaveCurrentBindings()
 end
 
@@ -101,12 +101,28 @@ local function tCompare(t1, t2)
 end
 
 function BT4KC:SaveCurrentBindings()
-	if self._savePending then return end
-	self._savePending = true
-	C_Timer.After(0.5, function()
-		self._savePending = nil
+	-- Debounce: coalesce a burst of UPDATE_BINDINGS into a single save.
+	-- The cancellable timer handle (vs. C_Timer.After) lets OnPlayerLogout
+	-- cancel a pending save so it can't fire post-logout against torn-down
+	-- AceDB state. The _loggingOut short-circuit covers UPDATE_BINDINGS that
+	-- Blizzard may fire during logout shutdown.
+	if self._loggingOut or self._saveTimer then return end
+	self._saveTimer = C_Timer.NewTimer(0.5, function()
+		self._saveTimer = nil
 		self:DoSaveCurrentBindings()
 	end)
+end
+
+function BT4KC:OnPlayerLogout()
+	-- PLAYER_LOGOUT is the last reliable SavedVariables write window. Cancel
+	-- any pending debounced save, mark the module as logging-out so a late
+	-- UPDATE_BINDINGS doesn't re-arm the timer, then flush synchronously.
+	self._loggingOut = true
+	if self._saveTimer then
+		self._saveTimer:Cancel()
+		self._saveTimer = nil
+	end
+	self:DoSaveCurrentBindings()
 end
 
 function BT4KC:DoSaveCurrentBindings()
