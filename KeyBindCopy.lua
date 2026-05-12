@@ -19,6 +19,8 @@ local InCombatLockdown = InCombatLockdown
 -- Resolve at call time so a runtime replacement of the API is honored.
 local function SaveBindings(...) return (_G.SaveBindings or _G.AttemptToSaveBindings)(...) end
 
+local L = LibStub("AceLocale-3.0"):GetLocale("Bartender4")
+
 -- Static Popup for safety
 StaticPopupDialogs["BARTENDER4_CONFIRM_KEYBIND_COPY"] = {
 	text = L["Are you sure you want to overwrite your current keybindings with those from %s? This cannot be undone."],
@@ -108,12 +110,16 @@ function BT4KC:SaveCurrentBindings()
 end
 
 function BT4KC:DoSaveCurrentBindings()
-	-- Any time we observe set 2 active, mark the character as initialized so
-	-- a future toggle ON via our UI won't clobber pre-existing bindings (set
-	-- up either at login, via Blizzard's UI, or via our own first-time copy).
-	if (GetCurrentBindingSet() or 1) == 2 then
-		Bartender4.db.char.charBindingsInitialized = true
-	end
+	-- Only save when the per-character binding set (2) is active. On set 1 the
+	-- active bindings ARE the account-wide bindings; writing them into
+	-- db.char.savedBindings would expose account-wide bindings as a per-character
+	-- copy source for other characters (see GetAvailableCharacters / CopyBindingsFrom).
+	if (GetCurrentBindingSet() or 1) ~= 2 then return end
+
+	-- Mark the character as initialized so a future toggle ON via our UI won't
+	-- clobber pre-existing bindings (set up either at login, via Blizzard's UI,
+	-- or via our own first-time copy).
+	Bartender4.db.char.charBindingsInitialized = true
 
 	local saved = {}
 	for _, action in ipairs(GetAllBT4BindingActions()) do
@@ -148,7 +154,6 @@ function BT4KC:GetAvailableCharacters()
 end
 
 function BT4KC:CopyBindingsFrom(charKey)
-	local L = LibStub("AceLocale-3.0"):GetLocale("Bartender4")
 	if InCombatLockdown() then
 		Bartender4:Print(L["Cannot copy keybindings during combat."])
 		return false
@@ -168,9 +173,11 @@ function BT4KC:CopyBindingsFrom(charKey)
 
 	-- Clear existing BT4 bindings
 	for _, action in ipairs(GetAllBT4BindingActions()) do
-		local boundKeys = { GetBindingKey(action) }
-		for _, key in ipairs(boundKeys) do
-			if key ~= "" then
+		local k1, k2, k3, k4 = GetBindingKey(action)
+		local boundKeys = { k1, k2, k3, k4 }
+		for i = 1, 4 do
+			local key = boundKeys[i]
+			if key and key ~= "" then
 				SetBinding(key)
 			end
 		end
@@ -178,8 +185,11 @@ function BT4KC:CopyBindingsFrom(charKey)
 
 	-- Apply copied bindings
 	for action, keys in pairs(bindings) do
-		for _, key in ipairs(keys) do
-			SetBinding(key, action)
+		for i = 1, 4 do
+			local key = keys[i]
+			if key and key ~= "" then
+				SetBinding(key, action)
+			end
 		end
 	end
 
@@ -189,7 +199,6 @@ end
 
 function BT4KC:SetupOptions()
 	if not self.options then
-		local L = LibStub("AceLocale-3.0"):GetLocale("Bartender4")
 		self.options = {
 			type = "group",
 			name = L["Copy Keybinds from Character"],
