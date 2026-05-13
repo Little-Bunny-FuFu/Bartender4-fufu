@@ -100,44 +100,129 @@ local function generateOptions()
 				get = function() return (GetCurrentBindingSet() or 1) == 2 end,
 				set = function(info, value)
 					if InCombatLockdown() then return end
+
+					-- Raw integer set ids: account == 1, character == 2.
+					local targetSet  = value and 2 or 1
+					local currentSet = GetCurrentBindingSet() or 1
+
+					if targetSet == currentSet then
+						-- Already in desired state (e.g., stale `get`); just refresh.
+						if value then
+							Bartender4.db.char.charBindingsInitialized = true
+						end
+						LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
+						return
+					end
+
 					if value and not Bartender4.db.char.charBindingsInitialized then
-						-- First-time activation: snapshot the current (account) bindings
-						-- into set 2 so the user doesn't start from an empty slate. The
-						-- resulting UPDATE_BINDINGS will mark the char as initialized;
-						-- set it here too as defense-in-depth in case the event chain
-						-- doesn't fire as expected on some client/version.
-						
-						-- In modern WoW, calling SaveBindings(2) from set 1 doesn't 
-						-- correctly set the active profile, nor does it always copy correctly.
-						-- We manually copy bindings, then switch to set 2 and save.
-						local currentBindings = {}
+						-- First-time activation: snapshot current (account) bindings
+						-- and copy them onto set 2.
+						--
+						-- The flag gate is what stops a later toggle OFF->ON from
+						-- overwriting any character-specific customizations -- e.g.,
+						-- bindings imported via "Copy Keybinds from Character" or
+						-- manually rebound while set 2 was active. To force a re-copy
+						-- after the first activation (for example, to recover from a
+						-- corrupted set 2 left over from older buggy versions of this
+						-- code), run
+						--   /run Bartender4.db.char.charBindingsInitialized = false
+						-- then toggle OFF and ON.
+						--
+						-- Use GetBindingKey (up to 4 keys) instead of GetBinding's
+						-- 2-key tuple -- the original v0 snapshot loop only captured
+						-- key1/key2 and is the most likely source of historical alt-
+						-- slot wipes on this character.
+						local snapshot = {}
 						for i = 1, GetNumBindings() do
-							local command, _, key1, key2 = GetBinding(i)
+							local command = GetBinding(i)
 							if command then
-								currentBindings[command] = {key1, key2}
+								local k1, k2, k3, k4 = GetBindingKey(command)
+								if k1 or k2 or k3 or k4 then
+									snapshot[command] = { k1, k2, k3, k4 }
+								end
 							end
 						end
-						
+
+						-- Activate set 2 BEFORE the restore loop. Each SetBinding
+						-- fires UPDATE_BINDINGS, and ActionBars:ReassignBindings
+						-- (registered for that event) may call
+						-- SaveBindings(GetCurrentBindingSet()). Activating set 2
+						-- first guarantees those cascading writes hit disk[2] and
+						-- cannot corrupt the account set on disk[1].
+						SaveBindings(1)
 						LoadBindings(2)
-						
-						for command, keys in pairs(currentBindings) do
-							for _, key in ipairs(keys) do
+						SaveBindings(2)
+
+						-- Clear EVERY key currently bound in set 2's in-memory state
+						-- before applying the snapshot. A per-command unbind would leak
+						-- bindings for commands that exist in set 2's loaded disk state
+						-- but are absent from the snapshot (stale defaults, actions the
+						-- user has unbound on set 1). The clear also guarantees slot
+						-- order when re-applying the snapshot: SetBinding's slot-fill
+						-- behavior when a command already has bindings is opaque, and
+						-- that was the observed alt-slot wipe.
+						for i = 1, GetNumBindings() do
+							local command = GetBinding(i)
+							if command then
+								local e1, e2, e3, e4 = GetBindingKey(command)
+								if e1 and e1 ~= "" then SetBinding(e1) end
+								if e2 and e2 ~= "" then SetBinding(e2) end
+								if e3 and e3 ~= "" then SetBinding(e3) end
+								if e4 and e4 ~= "" then SetBinding(e4) end
+							end
+						end
+
+						for command, keys in pairs(snapshot) do
+							for i = 1, 4 do
+								local key = keys[i]
 								if key and key ~= "" then
 									SetBinding(key, command)
 								end
 							end
 						end
-						
+
 						SaveBindings(2)
 						Bartender4.db.char.charBindingsInitialized = true
+					elseif value then
+						-- Subsequent activation: restore the user's previously-saved
+						-- set 2 from disk. Preserves character-specific customizations
+						-- (e.g., from "Copy Keybinds from Character" or manual edits
+						-- made while on set 2) across OFF/ON cycles.
+						SaveBindings(1)
+						LoadBindings(2)
+						SaveBindings(2)
 					else
-						local which = value and 2 or 1
-						-- Load first so any pre-existing bindings for that set are restored,
-						-- then Save to make the set active. Calling Save alone would
-						-- overwrite the target set with the currently-active bindings.
-						LoadBindings(which)
-						SaveBindings(which)
+						-- Switching character -> account. Flush set 2 (preserve any
+						-- in-memory edits since the last save), then load and activate
+						-- set 1.
+						SaveBindings(2)
+						LoadBindings(1)
+						SaveBindings(1)
 					end
+
+					LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
+				end,
+			},
+			charspecpromote = {
+				order = 6,
+				type = "execute",
+				name = L["Copy Character Keybinds to Account"],
+				desc = L["Save your current character-specific keybindings into the account set as well, so toggling Character Specific Keybinds OFF will preserve them. Overwrites your existing account-wide keybindings."],
+				width = "full",
+				disabled = function() return InCombatLockdown() or (GetCurrentBindingSet() or 1) ~= 2 end,
+				hidden = function() return (GetCurrentBindingSet() or 1) ~= 2 end,
+				confirm = true,
+				confirmText = L["This will overwrite your account-wide keybindings with your current character-specific keybindings. Continue?"],
+				func = function()
+					if InCombatLockdown() then return end
+					if (GetCurrentBindingSet() or 1) ~= 2 then return end
+					-- Promote: write current set 2 in-memory bindings into disk[1] so
+					-- the account set has the same data as the character set, then
+					-- reactivate set 2. After this, toggling per-character OFF will
+					-- preserve the user's bindings because both sets are in sync.
+					SaveBindings(1)  -- memory->disk[1]; this also activates set 1
+					LoadBindings(2)  -- memory<-disk[2] (should equal current memory)
+					SaveBindings(2)  -- reactivate set 2
 					LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
 				end,
 			},

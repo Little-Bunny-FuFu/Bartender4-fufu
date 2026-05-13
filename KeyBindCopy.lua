@@ -187,6 +187,8 @@ function BT4KC:CopyBindingsFrom(charKey)
 		return false
 	end
 
+	local bindingFailed, failedCount = false, 0
+
 	-- Clear existing BT4 bindings
 	for _, action in ipairs(GetAllBT4BindingActions()) do
 		local k1, k2, k3, k4 = GetBindingKey(action)
@@ -194,23 +196,38 @@ function BT4KC:CopyBindingsFrom(charKey)
 		for i = 1, 4 do
 			local key = boundKeys[i]
 			if key and key ~= "" then
-				SetBinding(key)
+				local ok = SetBinding(key)
+				if not ok then
+					bindingFailed = true
+					failedCount = failedCount + 1
+				end
 			end
 		end
 	end
 
 	-- Apply copied bindings
 	for action, keys in pairs(bindings) do
-		for i = 1, 4 do
-			local key = keys[i]
-			if key and key ~= "" then
-				SetBinding(key, action)
+		-- legacy: older saves stored a bare string instead of an array
+		if type(keys) == "string" and keys ~= "" then
+			keys = { keys }
+		end
+
+		if type(keys) == "table" then
+			for i = 1, 4 do
+				local key = keys[i]
+				if key and key ~= "" then
+					local ok = SetBinding(key, action)
+					if not ok then
+						bindingFailed = true
+						failedCount = failedCount + 1
+					end
+				end
 			end
 		end
 	end
 
 	SaveBindings(GetCurrentBindingSet() or 1)
-	return true
+	if bindingFailed then return nil, failedCount else return true end
 end
 
 function BT4KC:SetupOptions()
