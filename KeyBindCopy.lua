@@ -16,6 +16,11 @@ local SetBinding = SetBinding
 local GetCurrentBindingSet = GetCurrentBindingSet
 local InCombatLockdown = InCombatLockdown
 
+-- Capability gate: older Classic Era builds may lack GetCurrentBindingSet
+-- entirely. Without it, per-character binding slots aren't supported and the
+-- entire copy / save / restore pipeline is meaningless. Flag once at load.
+local UNSUPPORTED = (type(GetCurrentBindingSet) ~= "function")
+
 -- Resolve at call time so a runtime replacement of the API is honored.
 local function SaveBindings(...) return (_G.SaveBindings or _G.AttemptToSaveBindings)(...) end
 
@@ -27,11 +32,33 @@ StaticPopupDialogs["BARTENDER4_CONFIRM_KEYBIND_COPY"] = {
 	button1 = _G.YES,
 	button2 = _G.NO,
 	OnAccept = function(self, data)
-		if BT4KC:CopyBindingsFrom(data) then
-			Bartender4:Print((L["Keybindings copied from %s."]):format(data))
-			Bartender4.db.profile.keybindCopySource = nil
-			LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
+		-- data carries {charKey, expectedSet} captured at popup-open time so
+		-- OnAccept can verify the binding-set context hasn't changed between
+		-- Show and accept (StaticPopup_Show is async; the user could toggle
+		-- Character Specific Keybinds in between, which would otherwise cause
+		-- the copied bindings to be written to the wrong on-disk slot).
+		local charKey, expectedSet
+		if type(data) == "table" then
+			charKey, expectedSet = data.charKey, data.expectedSet
+		else
+			charKey = data -- legacy: string-only data from older callers
 		end
+		if expectedSet and (GetCurrentBindingSet() or 1) ~= expectedSet then
+			Bartender4:Print(L["Binding set changed since this dialog was opened; keybind copy cancelled."])
+			return
+		end
+		local ok, failedCount = BT4KC:CopyBindingsFrom(charKey, expectedSet)
+		if not ok then
+			Bartender4:Print((L["Could not copy keybindings from %s."]):format(tostring(charKey)))
+			return
+		end
+		if failedCount and failedCount > 0 then
+			Bartender4:Print((L["Keybindings copied from %s (%d failed)."]):format(charKey, failedCount))
+		else
+			Bartender4:Print((L["Keybindings copied from %s."]):format(charKey))
+		end
+		Bartender4.db.profile.keybindCopySource = nil
+		LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
 	end,
 	timeout = 0,
 	whileDead = true,
@@ -83,8 +110,14 @@ local function GetAllBT4BindingActions()
 end
 
 function BT4KC:OnEnable()
+	if UNSUPPORTED then return end
 	self:RegisterEvent("UPDATE_BINDINGS", "SaveCurrentBindings")
 	self:RegisterEvent("PLAYER_LOGOUT", "OnPlayerLogout")
+	-- PLAYER_ENTERING_WORLD clears _loggingOut if a queued logout was cancelled
+	-- (queue pop, BG entry, /afk cancel). Without this, the flag would stay
+	-- true for the rest of the session and SaveCurrentBindings would silently
+	-- no-op on every UPDATE_BINDINGS, losing edits made post-cancel.
+	self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
 	self:SaveCurrentBindings()
 end
 
@@ -123,6 +156,14 @@ function BT4KC:OnPlayerLogout()
 		self._saveTimer = nil
 	end
 	self:DoSaveCurrentBindings()
+end
+
+function BT4KC:OnPlayerEnteringWorld()
+	-- A queued logout that the user cancelled (e.g., queue pop, BG entry,
+	-- /afk cancel) leaves _loggingOut stuck true with no PLAYER_LOGOUT to
+	-- balance it. PLAYER_ENTERING_WORLD reliably fires after such cancels,
+	-- so we use it to lift the gate.
+	self._loggingOut = nil
 end
 
 function BT4KC:DoSaveCurrentBindings()
@@ -169,9 +210,17 @@ function BT4KC:GetAvailableCharacters()
 	return chars
 end
 
-function BT4KC:CopyBindingsFrom(charKey)
+function BT4KC:CopyBindingsFrom(charKey, expectedSet)
 	if InCombatLockdown() then
 		Bartender4:Print(L["Cannot copy keybindings during combat."])
+		return false
+	end
+
+	-- Re-verify binding-set context. The popup OnAccept already checks this,
+	-- but defending here covers other callers and any further drift between
+	-- the OnAccept check and our SaveBindings call below.
+	if expectedSet and (GetCurrentBindingSet() or 1) ~= expectedSet then
+		Bartender4:Print(L["Binding set changed since this dialog was opened; keybind copy cancelled."])
 		return false
 	end
 
@@ -189,48 +238,116 @@ function BT4KC:CopyBindingsFrom(charKey)
 
 	local bindingFailed, failedCount = false, 0
 
-	-- Clear existing BT4 bindings
-	for _, action in ipairs(GetAllBT4BindingActions()) do
-		local k1, k2, k3, k4 = GetBindingKey(action)
-		local boundKeys = { k1, k2, k3, k4 }
-		for i = 1, 4 do
-			local key = boundKeys[i]
-			if key and key ~= "" then
-				local ok = SetBinding(key)
-				if not ok then
-					bindingFailed = true
-					failedCount = failedCount + 1
-				end
-			end
+	-- Suppress the ActionBars:ReassignBindings -> SaveBindings cascade during
+	-- the multi-step rewrite. Each SetBinding below fires UPDATE_BINDINGS, and
+	-- without suppression a mid-rewrite cascade SaveBindings could persist a
+	-- half-applied state to disk. Save-and-restore the flag (not just nil-out)
+	-- so nested transitions don't have their outer suppression cancelled by an
+	-- inner clear. pcall + restore keeps the flag from sticking on error.
+	local prevSuppress = Bartender4._suppressBindingCascade
+	Bartender4._suppressBindingCascade = true
+	local ok, err = pcall(function()
+		-- Build the clear set as the union of the local action universe AND
+		-- the source's recorded actions. If the source character had a
+		-- different LIST_ACTIONBARS layout, the local s_allBindingActions list
+		-- alone would leave stale bindings on actions the source doesn't know
+		-- about. Conversely, the local list covers actions the source unbound
+		-- but exist locally.
+		local clearSet = {}
+		for _, action in ipairs(GetAllBT4BindingActions()) do
+			clearSet[action] = true
 		end
-	end
-
-	-- Apply copied bindings
-	for action, keys in pairs(bindings) do
-		-- legacy: older saves stored a bare string instead of an array
-		if type(keys) == "string" and keys ~= "" then
-			keys = { keys }
+		for action in pairs(bindings) do
+			clearSet[action] = true
 		end
 
-		if type(keys) == "table" then
+		-- Clear existing bindings on the union set.
+		for action in pairs(clearSet) do
+			local k1, k2, k3, k4 = GetBindingKey(action)
+			local boundKeys = { k1, k2, k3, k4 }
 			for i = 1, 4 do
-				local key = keys[i]
+				local key = boundKeys[i]
 				if key and key ~= "" then
-					local ok = SetBinding(key, action)
-					if not ok then
+					local r = SetBinding(key)
+					if not r then
 						bindingFailed = true
 						failedCount = failedCount + 1
 					end
 				end
 			end
 		end
+
+		-- Apply copied bindings. Pre-unbind each key globally before re-binding
+		-- it to the new action; this matches the pattern in Options.lua and
+		-- prevents leaving displaced non-BT4 commands in opaque slot states
+		-- (SetBinding's slot-fill behavior when the key is already bound to a
+		-- different command is not documented).
+		for action, keys in pairs(bindings) do
+			-- legacy: older saves stored a bare string instead of an array
+			if type(keys) == "string" and keys ~= "" then
+				keys = { keys }
+			end
+
+			if type(keys) == "table" then
+				for i = 1, 4 do
+					local key = keys[i]
+					if key and key ~= "" then
+						SetBinding(key)
+						local r = SetBinding(key, action)
+						if not r then
+							bindingFailed = true
+							failedCount = failedCount + 1
+						end
+					end
+				end
+			end
+		end
+
+		SaveBindings(GetCurrentBindingSet() or 1)
+	end)
+	Bartender4._suppressBindingCascade = prevSuppress
+	if not ok then
+		-- Surface to BugSack / BugGrabber / scriptErrors so the error and its
+		-- traceback are captured. Then print a fork-specific chat summary so
+		-- the user knows a Lua error occurred (without BugSack they'd only see
+		-- the standard error popup, which is easy to miss in combat or under
+		-- other UI noise). Return false so the popup OnAccept falls into its
+		-- existing "Could not copy from %s" branch and the source selector
+		-- stays populated for a retry -- same behavior as the early-return
+		-- hard fails above (combat, missing data).
+		(geterrorhandler() or function() end)(err)
+		Bartender4:Print(L["Internal error during keybind copy; your bindings may be in a partial state. See the error log for details."])
+		return false
 	end
 
-	SaveBindings(GetCurrentBindingSet() or 1)
-	if bindingFailed then return nil, failedCount else return true end
+	-- Return contract: `true, failedCount` on success (failedCount == 0 means
+	-- full success; > 0 means partial). Reserve `false` for hard fails (combat,
+	-- missing data, pcall trap) handled in the early returns above. This avoids
+	-- OnAccept routing partial-success through the "Could not copy" branch.
+	return true, failedCount
 end
 
 function BT4KC:SetupOptions()
+	if UNSUPPORTED then
+		-- Surface a one-line explanation in the options tree on clients that
+		-- don't support per-character binding sets (e.g., older Classic Era
+		-- builds where GetCurrentBindingSet doesn't exist) rather than silently
+		-- hiding the group.
+		self.options = {
+			type = "group",
+			name = L["Copy Keybinds from Character"],
+			guiInline = true,
+			args = {
+				unsupported = {
+					order = 1,
+					type = "description",
+					name = L["Per-character keybinds are not supported on this WoW client."],
+				},
+			},
+		}
+		Bartender4:RegisterModuleOptions("KeyBindCopy", self.options)
+		return
+	end
 	if not self.options then
 		self.options = {
 			type = "group",
@@ -271,7 +388,11 @@ function BT4KC:SetupOptions()
 					func = function()
 						local source = Bartender4.db.profile.keybindCopySource
 						if source then
-							StaticPopup_Show("BARTENDER4_CONFIRM_KEYBIND_COPY", source, nil, source)
+							-- Capture the current binding set at popup-open time and pass
+							-- it through `data` so OnAccept can verify the user hasn't
+							-- toggled between Show and accept.
+							local popupData = { charKey = source, expectedSet = GetCurrentBindingSet() or 1 }
+							StaticPopup_Show("BARTENDER4_CONFIRM_KEYBIND_COPY", source, nil, popupData)
 						end
 					end,
 				},

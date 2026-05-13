@@ -96,6 +96,11 @@ local function generateOptions()
 				name = L["Character Specific Keybinds"],
 				desc = L["Use character-specific keybindings for this character instead of the account-wide keybindings.\n\nThe first time you switch this on, your current account bindings are copied to the character set so you don't start from scratch."],
 				width = "full",
+				-- Capability gate: GetCurrentBindingSet is absent on older
+				-- Classic Era builds. Without it the toggle has nothing
+				-- meaningful to switch between, and the set() handler below
+				-- would call a nil global. Hide the entire option in that case.
+				hidden = function() return type(GetCurrentBindingSet) ~= "function" end,
 				disabled = InCombatLockdown,
 				get = function() return (GetCurrentBindingSet() or 1) == 2 end,
 				set = function(info, value)
@@ -114,6 +119,17 @@ local function generateOptions()
 						return
 					end
 
+					-- Suppress the ActionBars:ReassignBindings -> SaveBindings
+					-- cascade during the whole transition. Each SetBinding /
+					-- LoadBindings call below fires UPDATE_BINDINGS, and a
+					-- cascade SaveBindings firing between LoadBindings(N) and
+					-- the trailing SaveBindings(N) could persist to the wrong
+					-- on-disk slot. Save-and-restore (not nil-out) so a nested
+					-- transition's outer suppression isn't cancelled by the
+					-- inner clear. pcall + restore keeps the flag from sticking.
+					local _prevSuppress = Bartender4._suppressBindingCascade
+					Bartender4._suppressBindingCascade = true
+					local _ok, _err = pcall(function()
 					if value and not Bartender4.db.char.charBindingsInitialized then
 						-- First-time activation: snapshot current (account) bindings
 						-- and copy them onto set 2.
@@ -199,6 +215,15 @@ local function generateOptions()
 						LoadBindings(1)
 						SaveBindings(1)
 					end
+					end)
+					Bartender4._suppressBindingCascade = _prevSuppress
+					if not _ok then
+						-- Surface to BugSack / scriptErrors AND show a clean
+						-- in-game summary AND continue to NotifyChange so the
+						-- UI doesn't stay stale on a half-applied state.
+						(geterrorhandler() or function() end)(_err)
+						Bartender4:Print(L["Internal error during binding-set transition; your bindings may be in a partial state. See the error log for details."])
+					end
 
 					LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
 				end,
@@ -210,7 +235,7 @@ local function generateOptions()
 				desc = L["Save your current character-specific keybindings into the account set as well, so toggling Character Specific Keybinds OFF will preserve them. Overwrites your existing account-wide keybindings."],
 				width = "full",
 				disabled = function() return InCombatLockdown() or (GetCurrentBindingSet() or 1) ~= 2 end,
-				hidden = function() return (GetCurrentBindingSet() or 1) ~= 2 end,
+				hidden = function() return type(GetCurrentBindingSet) ~= "function" or (GetCurrentBindingSet() or 1) ~= 2 end,
 				confirm = true,
 				confirmText = L["This will overwrite your account-wide keybindings with your current character-specific keybindings. Continue?"],
 				func = function()
@@ -220,9 +245,18 @@ local function generateOptions()
 					-- the account set has the same data as the character set, then
 					-- reactivate set 2. After this, toggling per-character OFF will
 					-- preserve the user's bindings because both sets are in sync.
-					SaveBindings(1)  -- memory->disk[1]; this also activates set 1
-					LoadBindings(2)  -- memory<-disk[2] (should equal current memory)
-					SaveBindings(2)  -- reactivate set 2
+					local _prevSuppress = Bartender4._suppressBindingCascade
+					Bartender4._suppressBindingCascade = true
+					local _ok, _err = pcall(function()
+						SaveBindings(1)  -- memory->disk[1]; this also activates set 1
+						LoadBindings(2)  -- memory<-disk[2] (should equal current memory)
+						SaveBindings(2)  -- reactivate set 2
+					end)
+					Bartender4._suppressBindingCascade = _prevSuppress
+					if not _ok then
+						(geterrorhandler() or function() end)(_err)
+						Bartender4:Print(L["Internal error during keybind promote; your bindings may be in a partial state. See the error log for details."])
+					end
 					LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
 				end,
 			},

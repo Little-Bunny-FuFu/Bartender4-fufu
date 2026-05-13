@@ -27,7 +27,25 @@ do
 				UIErrorsFrame:AddMessage(msg, 1.0, 0.0, 0.0, 1.0, 5)
 			end
 		end)
-		return -- Abort loading entirely
+		-- Conflict cascade neutralizer. A bare `return` only stops THIS file --
+		-- every later file in the .toc still loads and would crash on
+		-- `Bartender4:NewModule(...)` because the AceAddon was never created
+		-- (NewAddon is below this return). Rather than guarding every fork file
+		-- individually, shield the shared private table with a self-referencing
+		-- callable proxy: any missing-key read (`Bartender4.NewModule`,
+		-- `Bartender4.Bar.prototype`, etc.) returns the proxy, and the proxy is
+		-- callable and self-indexing so method calls and chained field reads
+		-- both no-op. DisableAddOn takes effect on the next /reload, so this is
+		-- only for the one load between conflict detection and the user's
+		-- /reload action.
+		local proxy = {}
+		setmetatable(proxy, {
+			__index = function() return proxy end,
+			__call = function() return proxy end,
+		})
+		setmetatable(Bartender4, { __index = function() return proxy end })
+		Bartender4.__conflict = true
+		return
 	end
 end
 

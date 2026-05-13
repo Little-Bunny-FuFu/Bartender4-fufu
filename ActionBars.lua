@@ -22,6 +22,12 @@ local Masque = LibStub("Masque", true)
 
 -- GLOBALS: UnitClass, InCombatLockdown, GetBindingKey, ClearOverrideBindings, SetOverrideBindingClick
 
+-- Resolve SaveBindings at call time. Older Classic Era builds expose only
+-- AttemptToSaveBindings; on retail and recent Classic both exist. Mirror the
+-- pattern used in KeyBindCopy.lua so this file behaves the same on every
+-- supported client.
+local function SaveBindings(...) return (_G.SaveBindings or _G.AttemptToSaveBindings)(...) end
+
 local abdefaults = {
 	['**'] = Bartender4.Util:Merge({
 		enabled = true,
@@ -283,39 +289,61 @@ function BT4ActionBars:ReassignBindings()
 	if InCombatLockdown() or s_inReassignBindings or self.InHousing then return end
 	s_inReassignBindings = true
 
-	if self.actionbars then
-		for id, mapping in pairs(BINDING_MAPPINGS) do
-			local frame = self.actionbars[id]
-			if frame then
-				ClearOverrideBindings(frame)
-				for i = 1,min(#frame.buttons, 12) do
-					local button, real_button = mapping:format(i), frame.buttons[i]:GetName()
-					for k=1, select('#', GetBindingKey(button)) do
-						local key = select(k, GetBindingKey(button))
-						if key and key ~= "" then
-							SetOverrideBindingClick(frame, false, key, real_button, "Keybind")
+	-- pcall-wrap the body so an error in any step doesn't leave
+	-- s_inReassignBindings stuck true (which would no-op ReassignBindings for
+	-- the rest of the session). Re-raise after the flag restore so the caller
+	-- (typically WoW's event dispatcher for UPDATE_BINDINGS) routes through
+	-- the default error handler / BugSack. This is intentionally different
+	-- from the KeyBindCopy.lua and Options.lua sites: those swallow with
+	-- geterrorhandler+Print because their callers are user-action handlers
+	-- that need the UI to stay alive (Print + NotifyChange). ReassignBindings
+	-- has no UI cleanup to preserve, so propagation is correct here.
+	local ok, err = pcall(function()
+		if self.actionbars then
+			for id, mapping in pairs(BINDING_MAPPINGS) do
+				local frame = self.actionbars[id]
+				if frame then
+					ClearOverrideBindings(frame)
+					for i = 1,min(#frame.buttons, 12) do
+						local button, real_button = mapping:format(i), frame.buttons[i]:GetName()
+						for k=1, select('#', GetBindingKey(button)) do
+							local key = select(k, GetBindingKey(button))
+							if key and key ~= "" then
+								SetOverrideBindingClick(frame, false, key, real_button, "Keybind")
+							end
 						end
 					end
 				end
 			end
 		end
-	end
 
-	-- re-assign bindings from LeftButton to Keybind buttons
-	local needSaving = false
-	for i = 1,180 do
-		local button = ("BT4Button%d"):format(i)
-		local clickbutton = ("CLICK %s:LeftButton"):format(button)
-		if MigrateKeybindBindings(button, GetBindingKey(clickbutton)) then
-			needSaving = true
+		-- re-assign bindings from LeftButton to Keybind buttons
+		local needSaving = false
+		for i = 1,180 do
+			local button = ("BT4Button%d"):format(i)
+			local clickbutton = ("CLICK %s:LeftButton"):format(button)
+			if MigrateKeybindBindings(button, GetBindingKey(clickbutton)) then
+				needSaving = true
+			end
 		end
-	end
 
-	if needSaving then
-		SaveBindings(GetCurrentBindingSet())
-	end
+		if needSaving and not Bartender4._suppressBindingCascade then
+			-- Suppress flag is set during multi-step binding-set transitions in
+			-- Options.lua and KeyBindCopy.lua. Persisting mid-transition could
+			-- write a half-applied state to the wrong on-disk slot.
+			-- Capability gate: older Classic Era builds lack GetCurrentBindingSet
+			-- entirely. Without the API there's only one binding set anyway, so
+			-- SaveBindings is called with no argument (legacy behavior).
+			if type(GetCurrentBindingSet) == "function" then
+				SaveBindings(GetCurrentBindingSet())
+			else
+				SaveBindings()
+			end
+		end
+	end)
 
 	s_inReassignBindings = false
+	if not ok then error(err, 0) end
 end
 
 BT4ActionBars.BLIZZARD_BAR_MAP = {
