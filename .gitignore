@@ -1,4 +1,26 @@
-# Embedded libraries (copied from local install, not tracked in git)
+# Embedded libraries — UPSTREAM MIRRORS, not tracked (avoids churn obscuring
+# the fork diff; the packager re-fetches them from .pkgmeta externals).
+#
+# FORK-OWNED LIBS POLICY
+# ----------------------
+# A few libs are BT4-specific (Nevcairiel / Bartender-ecosystem authorship,
+# tight coupling) and are legitimate targets for fork modification. When a
+# BT4-specific lib is first modified it becomes *fork-owned source*, not an
+# upstream mirror. Onboarding procedure (all three steps, together):
+#   1. Remove its line from this .gitignore (so the modified source is tracked).
+#   2. git add + commit the lib directory.
+#   3. Remove its .pkgmeta external (git becomes the source of truth; a
+#      packaged build then carries the patched copy, not upstream stock).
+# Safe-state rule: a lib is EITHER {ignored + .pkgmeta external present} OR
+# {tracked + external removed}. The mixed states are bugs — ignored+no-external
+# ships a broken release; tracked+external lets the packager overwrite the
+# patch. Un-ignoring and de-externaling MUST move together.
+# BT4-specific (fork-ownable when modified): LibActionButton-1.0 [DONE — see
+# below], LibButtonGlow-1.0, LibKeyBound-1.0. (SimpleSticky.lua,
+# LibDataBroker-1.1.lua are already tracked single-file BT4 bundles.)
+# Everything else below is a generic ecosystem mirror — keep ignored.
+# See Bartender4-fufu.md "Fork-owned libraries" and CLAUDE.md rule #5.
+
 libs/AceAddon-3.0/
 libs/AceConfig-3.0/
 libs/AceConsole-3.0/
@@ -10,7 +32,8 @@ libs/AceGUI-3.0-SharedMediaWidgets/
 libs/AceHook-3.0/
 libs/AceLocale-3.0/
 libs/CallbackHandler-1.0/
-libs/LibActionButton-1.0/
+# libs/LibActionButton-1.0/  <- FORK-OWNED (perf-patched, tracked). Do NOT
+#   re-add this line, and keep its .pkgmeta external removed (see policy above).
 libs/LibButtonGlow-1.0/
 libs/LibClassicSpellActionCount-1.0/
 libs/LibDBIcon-1.0/
