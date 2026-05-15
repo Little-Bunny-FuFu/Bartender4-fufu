@@ -6,11 +6,16 @@
 # A few libs are BT4-specific (Nevcairiel / Bartender-ecosystem authorship,
 # tight coupling) and are legitimate targets for fork modification. When a
 # BT4-specific lib is first modified it becomes *fork-owned source*, not an
-# upstream mirror. Onboarding procedure (all three steps, together):
+# upstream mirror. Onboarding procedure (all FOUR steps, together):
 #   1. Remove its line from this .gitignore (so the modified source is tracked).
 #   2. git add + commit the lib directory.
 #   3. Remove its .pkgmeta external (git becomes the source of truth; a
 #      packaged build then carries the patched copy, not upstream stock).
+#   4. Move its load line in the .toc OUTSIDE the #@no-lib-strip@ block (the
+#      no-lib packaged build strips everything inside those markers; a
+#      fork-owned lib must ship+load in BOTH builds). Place it with the other
+#      always-load tracked bundles (SimpleSticky / LibDataBroker), after its
+#      dependencies' load lines.
 # Safe-state rule: a lib is EITHER {ignored + .pkgmeta external present} OR
 # {tracked + external removed}. The mixed states are bugs — ignored+no-external
 # ships a broken release; tracked+external lets the packager overwrite the

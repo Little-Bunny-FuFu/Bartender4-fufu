@@ -41,7 +41,6 @@ libs\LibClassicSpellActionCount-1.0\LibClassicSpellActionCount-1.0.lua [AllowLoa
 
 libs\LibKeyBound-1.0\lib.xml
 libs\LibButtonGlow-1.0\LibButtonGlow-1.0.lua
-libs\LibActionButton-1.0\LibActionButton-1.0.lua
 libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
 libs\LibWindow-1.1\LibWindow-1.1.lua
 libs\LibDualSpec-1.0\LibDualSpec-1.0.lua
@@ -49,6 +48,15 @@ libs\LibDualSpec-1.0\LibDualSpec-1.0.lua
 libs\LibSharedMedia-3.0\lib.xml
 libs\AceGUI-3.0-SharedMediaWidgets\widget.xml
 #@end-no-lib-strip@
+
+# [fufu] FORK-OWNED patched LibActionButton-1.0 — loaded OUTSIDE the
+# #@no-lib-strip@ block on purpose. It is committed fork source (no .pkgmeta
+# external), so it must ship AND load in BOTH the normal and the no-lib
+# packaged builds. Inside the strip block, a no-lib build drops this line and
+# silently runs stock/absent LibActionButton, losing every perf patch. Do NOT
+# move it back inside the strip markers. (Loads after LibButtonGlow above in
+# the normal build; same always-load treatment as SimpleSticky/LibDataBroker.)
+libs\LibActionButton-1.0\LibActionButton-1.0.lua
 
 libs\SimpleSticky.lua
 
