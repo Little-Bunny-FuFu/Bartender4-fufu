@@ -12,12 +12,15 @@ externals:
   libs/AceGUI-3.0: https://repos.wowace.com/wow/ace3/trunk/AceGUI-3.0
   libs/AceConfig-3.0: https://repos.wowace.com/wow/ace3/trunk/AceConfig-3.0
   libs/AceGUI-3.0-SharedMediaWidgets: https://repos.wowace.com/wow/ace-gui-3-0-shared-media-widgets/trunk/AceGUI-3.0-SharedMediaWidgets
-  # [fufu] LibActionButton-1.0 is intentionally NOT an external. This fork
-  # ships a performance-patched copy (see Bartender4-fufu.md "LibActionButton
-  # perf patch"). Re-enabling the line below lets a packager / library updater
-  # overwrite the patch with upstream stock, silently reverting all perf work.
-  # Upstream updates to this lib must be pulled + re-patched by hand.
-  # libs/LibActionButton-1.0: https://repos.wowace.com/wow/libactionbutton-1-0
+  # [fufu] DO NOT comment this out. libs/ is gitignored, so this external is
+  # the ONLY source of LibActionButton-1.0 for a packaged release -- removing
+  # it ships a broken release missing a hard dependency. The perf patch lives
+  # only in the local deploy + the Bartender4-fufu.md re-apply procedure; this
+  # fork is deploy-via-deploy.ps1 only and is NOT packager-safe (a packaged
+  # build would carry stock, unpatched LibActionButton). Re-pull protection is
+  # handled out-of-band by deploy.ps1's _fufuPerfPatch guard + the runtime
+  # canary, not by editing this line.
+  libs/LibActionButton-1.0: https://repos.wowace.com/wow/libactionbutton-1-0
   libs/LibButtonGlow-1.0: https://repos.wowace.com/wow/libbuttonglow-1-0
   libs/LibKeyBound-1.0: https://repos.wowace.com/wow/libkeybound-1-0/trunk/LibKeyBound-1.0
   libs/LibDBIcon-1.0: https://repos.wowace.com/wow/libdbicon-1-0/trunk/LibDBIcon-1.0
