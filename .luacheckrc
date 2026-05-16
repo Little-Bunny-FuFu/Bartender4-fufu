@@ -14,6 +14,8 @@ ignore = {
 	"213", -- Unused loop variable
 	"311", -- Value assigned to a local variable is unused
 	"542", -- empty if branch
+	"613", -- [fufu] trailing whitespace inside an upstream BT4 localized long-string (locale/enUS.lua); not ours to reflow
+	"231/bindingFailed", -- [fufu] pre-existing write-only var in CopyBindingsFrom; logic deliberately untouched
 }
 
 globals = {
@@ -30,6 +32,9 @@ globals = {
 	"MicroMenu",
 
 	"UIParentBottomManagedFrameContainer",
+
+	-- [fufu] mutated: we assign StaticPopupDialogs[...] for confirm dialogs
+	"StaticPopupDialogs",
 }
 
 read_globals = {
@@ -195,4 +200,26 @@ read_globals = {
 	"MainMenuBarPerformanceBarFrame",
 	"MainMenuExpBar",
 	"ReputationWatchBar",
+
+	-- [fufu] real Blizzard APIs used by the keybind-copy module / fork code.
+	-- Registered so `luacheck . -q` (a hard gate before BigWigsMods/packager
+	-- in packager.yml) exits 0 and a tagged release can actually build.
+	"C_Timer",
+	"ChatFrame1",
+	"CloseDropDownMenus",
+	"DEFAULT_CHAT_FRAME",
+	"DisableAddOn",
+	"GetBinding",
+	"GetNumBindings",
+	"GetRealmName",
+	"IsAddOnLoaded",
+	"LoadBindings",
+	"StaticPopup_Show",
+	"ToggleDropDownMenu",
+	"UIDropDownMenu_AddButton",
+	"UIDropDownMenu_CreateInfo",
+	"UIDropDownMenu_Initialize",
+	"UIErrorsFrame",
+	"UnitName",
+	"geterrorhandler",
 }

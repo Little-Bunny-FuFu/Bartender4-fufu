@@ -37,8 +37,11 @@ jobs:
           luarocks install --local luacheck
           /home/runner/.luarocks/bin/luacheck . --no-color -q
 
-      - name: Update Locale
-        if: github.ref == 'refs/heads/master'
-        run: ./locale/wowace-locale-import.sh
+      # [fufu] Upstream's "Update Locale" step (./locale/wowace-locale-import.sh
+      # against the WoWAce "Bartender4" project) was removed: this fork is
+      # GitHub/guild-only, has no WoWAce localization project, and the import
+      # is upstream-coupled (would fail or pull stock Bartender4 locale).
+      # enUS is maintained directly in locale/enUS.lua; other locales fall
+      # back to enUS via AceLocale, same as stock BT4.
 
       - uses: BigWigsMods/packager@v2

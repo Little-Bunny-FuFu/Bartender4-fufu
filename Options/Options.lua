@@ -28,7 +28,6 @@ do
 	end
 end
 
-local s_HookedKeyBound, s_KeyBoundHookShowBTOptions
 local KB = LibStub("LibKeyBound-1.0")
 local LDBIcon = LibStub("LibDBIcon-1.0", true)
 local LibDualSpec = (not WoWClassicEra) and LibStub("LibDualSpec-1.0", true)
@@ -81,183 +80,13 @@ local function generateOptions()
 				func = function()
 					KB:Toggle()
 					AceConfigDialog:Close("Bartender4")
-
-					if KeyboundDialog and not s_HookedKeyBound then
-						KeyboundDialog:HookScript("OnHide", function() if s_KeyBoundHookShowBTOptions then AceConfigDialog:Open("Bartender4") s_KeyBoundHookShowBTOptions = nil end end)
-						s_HookedKeyBound = true
-					end
-
-					s_KeyBoundHookShowBTOptions = true
-				end,
-			},
-			charspecbindings = {
-				order = 5,
-				type = "toggle",
-				name = L["Character Specific Keybinds"],
-				desc = L["Use character-specific keybindings for this character instead of the account-wide keybindings.\n\nThe first time you switch this on, your current account bindings are copied to the character set so you don't start from scratch."],
-				width = "full",
-				-- Capability gate: GetCurrentBindingSet is absent on older
-				-- Classic Era builds. Without it the toggle has nothing
-				-- meaningful to switch between, and the set() handler below
-				-- would call a nil global. Hide the entire option in that case.
-				hidden = function() return type(GetCurrentBindingSet) ~= "function" end,
-				disabled = InCombatLockdown,
-				get = function() return (GetCurrentBindingSet() or 1) == 2 end,
-				set = function(info, value)
-					if InCombatLockdown() then return end
-
-					-- Raw integer set ids: account == 1, character == 2.
-					local targetSet  = value and 2 or 1
-					local currentSet = GetCurrentBindingSet() or 1
-
-					if targetSet == currentSet then
-						-- Already in desired state (e.g., stale `get`); just refresh.
-						if value then
-							Bartender4.db.char.charBindingsInitialized = true
-						end
-						LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
-						return
-					end
-
-					-- Suppress the ActionBars:ReassignBindings -> SaveBindings
-					-- cascade during the whole transition. Each SetBinding /
-					-- LoadBindings call below fires UPDATE_BINDINGS, and a
-					-- cascade SaveBindings firing between LoadBindings(N) and
-					-- the trailing SaveBindings(N) could persist to the wrong
-					-- on-disk slot. Save-and-restore (not nil-out) so a nested
-					-- transition's outer suppression isn't cancelled by the
-					-- inner clear. pcall + restore keeps the flag from sticking.
-					local _prevSuppress = Bartender4._suppressBindingCascade
-					Bartender4._suppressBindingCascade = true
-					local _ok, _err = pcall(function()
-					if value and not Bartender4.db.char.charBindingsInitialized then
-						-- First-time activation: snapshot current (account) bindings
-						-- and copy them onto set 2.
-						--
-						-- The flag gate is what stops a later toggle OFF->ON from
-						-- overwriting any character-specific customizations -- e.g.,
-						-- bindings imported via "Copy Keybinds from Character" or
-						-- manually rebound while set 2 was active. To force a re-copy
-						-- after the first activation (for example, to recover from a
-						-- corrupted set 2 left over from older buggy versions of this
-						-- code), run
-						--   /run Bartender4.db.char.charBindingsInitialized = false
-						-- then toggle OFF and ON.
-						--
-						-- Use GetBindingKey (up to 4 keys) instead of GetBinding's
-						-- 2-key tuple -- the original v0 snapshot loop only captured
-						-- key1/key2 and is the most likely source of historical alt-
-						-- slot wipes on this character.
-						local snapshot = {}
-						for i = 1, GetNumBindings() do
-							local command = GetBinding(i)
-							if command then
-								local k1, k2, k3, k4 = GetBindingKey(command)
-								if k1 or k2 or k3 or k4 then
-									snapshot[command] = { k1, k2, k3, k4 }
-								end
-							end
-						end
-
-						-- Activate set 2 BEFORE the restore loop. Each SetBinding
-						-- fires UPDATE_BINDINGS, and ActionBars:ReassignBindings
-						-- (registered for that event) may call
-						-- SaveBindings(GetCurrentBindingSet()). Activating set 2
-						-- first guarantees those cascading writes hit disk[2] and
-						-- cannot corrupt the account set on disk[1].
-						SaveBindings(1)
-						LoadBindings(2)
-						SaveBindings(2)
-
-						-- Clear EVERY key currently bound in set 2's in-memory state
-						-- before applying the snapshot. A per-command unbind would leak
-						-- bindings for commands that exist in set 2's loaded disk state
-						-- but are absent from the snapshot (stale defaults, actions the
-						-- user has unbound on set 1). The clear also guarantees slot
-						-- order when re-applying the snapshot: SetBinding's slot-fill
-						-- behavior when a command already has bindings is opaque, and
-						-- that was the observed alt-slot wipe.
-						for i = 1, GetNumBindings() do
-							local command = GetBinding(i)
-							if command then
-								local e1, e2, e3, e4 = GetBindingKey(command)
-								if e1 and e1 ~= "" then SetBinding(e1) end
-								if e2 and e2 ~= "" then SetBinding(e2) end
-								if e3 and e3 ~= "" then SetBinding(e3) end
-								if e4 and e4 ~= "" then SetBinding(e4) end
-							end
-						end
-
-						for command, keys in pairs(snapshot) do
-							for i = 1, 4 do
-								local key = keys[i]
-								if key and key ~= "" then
-									SetBinding(key, command)
-								end
-							end
-						end
-
-						SaveBindings(2)
-						Bartender4.db.char.charBindingsInitialized = true
-					elseif value then
-						-- Subsequent activation: restore the user's previously-saved
-						-- set 2 from disk. Preserves character-specific customizations
-						-- (e.g., from "Copy Keybinds from Character" or manual edits
-						-- made while on set 2) across OFF/ON cycles.
-						SaveBindings(1)
-						LoadBindings(2)
-						SaveBindings(2)
-					else
-						-- Switching character -> account. Flush set 2 (preserve any
-						-- in-memory edits since the last save), then load and activate
-						-- set 1.
-						SaveBindings(2)
-						LoadBindings(1)
-						SaveBindings(1)
-					end
-					end)
-					Bartender4._suppressBindingCascade = _prevSuppress
-					if not _ok then
-						-- Surface to BugSack / scriptErrors AND show a clean
-						-- in-game summary AND continue to NotifyChange so the
-						-- UI doesn't stay stale on a half-applied state.
-						(geterrorhandler() or function() end)(_err)
-						Bartender4:Print(L["Internal error during binding-set transition; your bindings may be in a partial state. See the error log for details."])
-					end
-
-					LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
-				end,
-			},
-			charspecpromote = {
-				order = 6,
-				type = "execute",
-				name = L["Copy Character Keybinds to Account"],
-				desc = L["Save your current character-specific keybindings into the account set as well, so toggling Character Specific Keybinds OFF will preserve them. Overwrites your existing account-wide keybindings."],
-				width = "full",
-				disabled = function() return InCombatLockdown() or (GetCurrentBindingSet() or 1) ~= 2 end,
-				hidden = function() return type(GetCurrentBindingSet) ~= "function" or (GetCurrentBindingSet() or 1) ~= 2 end,
-				confirm = true,
-				confirmText = L["This will overwrite your account-wide keybindings with your current character-specific keybindings. Continue?"],
-				func = function()
-					if InCombatLockdown() then return end
-					if (GetCurrentBindingSet() or 1) ~= 2 then return end
-					-- Promote: write current set 2 in-memory bindings into disk[1] so
-					-- the account set has the same data as the character set, then
-					-- reactivate set 2. After this, toggling per-character OFF will
-					-- preserve the user's bindings because both sets are in sync.
-					local _prevSuppress = Bartender4._suppressBindingCascade
-					Bartender4._suppressBindingCascade = true
-					local _ok, _err = pcall(function()
-						SaveBindings(1)  -- memory->disk[1]; this also activates set 1
-						LoadBindings(2)  -- memory<-disk[2] (should equal current memory)
-						SaveBindings(2)  -- reactivate set 2
-					end)
-					Bartender4._suppressBindingCascade = _prevSuppress
-					if not _ok then
-						(geterrorhandler() or function() end)(_err)
-						Bartender4:Print(L["Internal error during keybind promote; your bindings may be in a partial state. See the error log for details."])
-					end
-					LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
+					-- [fufu] Upstream reopened the BT4 options window when KeyboundDialog
+					-- hid (a "return to options after binding" nicety). REMOVED: LibKeyBound
+					-- is a SHARED library and other consumers (notably AutoBar, Core.lua)
+					-- call LibKeyBound:Deactivate() on PLAYER_REGEN_DISABLED, which hid the
+					-- shared KeyboundDialog and re-popped BT4 options *during combat*. No
+					-- LibKeyBound-internal-state guard can tell that apart from a real user
+					-- finish (two in-game attempts failed). Use /bt to reopen options.
 				end,
 			},
 			bars = {

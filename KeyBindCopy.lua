@@ -6,15 +6,20 @@ local _, Bartender4 = ...
 local BT4KC = Bartender4:NewModule("KeyBindCopy", "AceEvent-3.0")
 
 -- GLOBALS: Bartender4DB, UnitName, GetRealmName, GetBindingKey, SetBinding, SaveBindings, AttemptToSaveBindings, GetCurrentBindingSet, InCombatLockdown
--- GLOBALS: StaticPopupDialogs, StaticPopup_Show, GetCurrentBindingSet
+-- GLOBALS: GetNumBindings, GetBinding, LoadBindings, StaticPopupDialogs, StaticPopup_Show, geterrorhandler
+-- GLOBALS: CreateFrame, UIParent, BackdropTemplateMixin, KeyboundDialog, KeyboundDialogCheck
+-- GLOBALS: UIDropDownMenu_CreateInfo, UIDropDownMenu_AddButton, UIDropDownMenu_Initialize, ToggleDropDownMenu, CloseDropDownMenus
 
 local _G = _G
 local pairs, ipairs, next, type = pairs, ipairs, next, type
+local sort = table.sort
 local format = string.format
 local GetBindingKey = GetBindingKey
 local SetBinding = SetBinding
 local GetCurrentBindingSet = GetCurrentBindingSet
 local InCombatLockdown = InCombatLockdown
+local GetNumBindings, GetBinding, LoadBindings = GetNumBindings, GetBinding, LoadBindings
+local CreateFrame = CreateFrame
 
 -- Capability gate: older Classic Era builds may lack GetCurrentBindingSet
 -- entirely. Without it, per-character binding slots aren't supported and the
@@ -25,6 +30,7 @@ local UNSUPPORTED = (type(GetCurrentBindingSet) ~= "function")
 local function SaveBindings(...) return (_G.SaveBindings or _G.AttemptToSaveBindings)(...) end
 
 local L = LibStub("AceLocale-3.0"):GetLocale("Bartender4")
+local LKB = LibStub("LibKeyBound-1.0", true)
 
 -- Static Popup for safety
 StaticPopupDialogs["BARTENDER4_CONFIRM_KEYBIND_COPY"] = {
@@ -59,7 +65,20 @@ StaticPopupDialogs["BARTENDER4_CONFIRM_KEYBIND_COPY"] = {
 		end
 		Bartender4.db.profile.keybindCopySource = nil
 		LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
+		if BT4KC.RefreshKeyboundDialogUI then BT4KC:RefreshKeyboundDialogUI() end
 	end,
+	timeout = 0,
+	whileDead = true,
+	hideOnEscape = true,
+}
+
+-- Confirm popup for the promote action. The old AceConfig button used
+-- `confirm=true`; the raw dialog button needs an explicit StaticPopup.
+StaticPopupDialogs["BARTENDER4_CONFIRM_PROMOTE_KEYBINDS"] = {
+	text = L["This will overwrite your account-wide keybindings with your current character-specific keybindings. Continue?"],
+	button1 = _G.YES,
+	button2 = _G.NO,
+	OnAccept = function() BT4KC:PromoteCharToAccount() end,
 	timeout = 0,
 	whileDead = true,
 	hideOnEscape = true,
@@ -70,7 +89,7 @@ local function GetAllBT4BindingActions()
 	if s_allBindingActions then return s_allBindingActions end
 	local actions = {}
 	local ActionBarsMod = Bartender4:GetModule("ActionBars")
-	
+
 	-- 1. Custom Bartender4 Keybinds
 	for _, i in ipairs(ActionBarsMod.LIST_ACTIONBARS) do
 		for k = 1, 12 do
@@ -118,6 +137,20 @@ function BT4KC:OnEnable()
 	-- true for the rest of the session and SaveCurrentBindings would silently
 	-- no-op on every UPDATE_BINDINGS, losing edits made post-cancel.
 	self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
+	-- Attach our controls to LibKeyBound's "Binding Mode" dialog. The callback
+	-- fires on every Activate() (every dialog open); the UI build it triggers
+	-- is one-shot/idempotent, the refresh runs each open.
+	if LKB and LKB.RegisterCallback then
+		LKB.RegisterCallback(self, "LIBKEYBOUND_ENABLED", "OnKeyBoundEnabled")
+	end
+	-- Combat flips the dialog buttons' enable-state (and is exactly when the
+	-- in-function guards reject a click). LibKeyBound toggles the dialog's
+	-- visibility on REGEN, but :Show() on an already-shown dialog fires no
+	-- OnShow, so the OnShow hook alone cannot keep the annex truthful across
+	-- combat entered while it is open. Refresh on the transitions directly
+	-- (RefreshKeyboundDialogUI is a no-op until built and while hidden).
+	self:RegisterEvent("PLAYER_REGEN_DISABLED", "RefreshKeyboundDialogUI")
+	self:RegisterEvent("PLAYER_REGEN_ENABLED", "RefreshKeyboundDialogUI")
 	self:SaveCurrentBindings()
 end
 
@@ -185,7 +218,7 @@ function BT4KC:DoSaveCurrentBindings()
 			saved[action] = { k1, k2, k3, k4 }
 		end
 	end
-	
+
 	-- Change detection: only update if data is different to avoid excessive SavedVariables churn
 	if not tCompare(saved, Bartender4.db.char.savedBindings) then
 		Bartender4.db.char.savedBindings = saved
@@ -202,7 +235,11 @@ function BT4KC:GetAvailableCharacters()
 	if rawDB and rawDB.char then
 		local myKey = self:GetCurrentCharKey()
 		for key, data in pairs(rawDB.char) do
-			if key ~= myKey and data.savedBindings and next(data.savedBindings) then
+			-- Bartender4DB is untrusted (hand-edited / stale / corrupt): a
+			-- non-table `data` would error on `.savedBindings`, and a non-string
+			-- key must not become a selectable copy source.
+			if type(key) == "string" and key ~= myKey and type(data) == "table"
+				and type(data.savedBindings) == "table" and next(data.savedBindings) then
 				chars[key] = key
 			end
 		end
@@ -229,9 +266,9 @@ function BT4KC:CopyBindingsFrom(charKey, expectedSet)
 		Bartender4:Print(L["Error: Character data not found for %s."]:format(charKey))
 		return false
 	end
-	
+
 	local bindings = rawDB.char[charKey].savedBindings
-	if not bindings then
+	if type(bindings) ~= "table" then
 		Bartender4:Print(L["Error: No saved bindings found for %s."]:format(charKey))
 		return false
 	end
@@ -257,8 +294,14 @@ function BT4KC:CopyBindingsFrom(charKey, expectedSet)
 		for _, action in ipairs(GetAllBT4BindingActions()) do
 			clearSet[action] = true
 		end
+		-- `bindings` is another character's saved DB -- untrusted. Only string
+		-- action names are safe to feed into GetBindingKey/SetBinding; keep the
+		-- full union (no local allow-list) so a source with a different bar
+		-- layout still copies in full.
 		for action in pairs(bindings) do
-			clearSet[action] = true
+			if type(action) == "string" then
+				clearSet[action] = true
+			end
 		end
 
 		-- Clear existing bindings on the union set.
@@ -288,10 +331,10 @@ function BT4KC:CopyBindingsFrom(charKey, expectedSet)
 				keys = { keys }
 			end
 
-			if type(keys) == "table" then
+			if type(action) == "string" and type(keys) == "table" then
 				for i = 1, 4 do
 					local key = keys[i]
-					if key and key ~= "" then
+					if type(key) == "string" and key ~= "" then
 						SetBinding(key)
 						local r = SetBinding(key, action)
 						if not r then
@@ -327,77 +370,311 @@ function BT4KC:CopyBindingsFrom(charKey, expectedSet)
 	return true, failedCount
 end
 
-function BT4KC:SetupOptions()
-	if UNSUPPORTED then
-		-- Surface a one-line explanation in the options tree on clients that
-		-- don't support per-character binding sets (e.g., older Classic Era
-		-- builds where GetCurrentBindingSet doesn't exist) rather than silently
-		-- hiding the group.
-		self.options = {
-			type = "group",
-			name = L["Copy Keybinds from Character"],
-			guiInline = true,
-			args = {
-				unsupported = {
-					order = 1,
-					type = "description",
-					name = L["Per-character keybinds are not supported on this WoW client."],
-				},
-			},
-		}
-		Bartender4:RegisterModuleOptions("KeyBindCopy", self.options)
+-- Fork-safe per-character binding-set transition. Ported verbatim (logic and
+-- rationale) from the former Options.lua "Character Specific Keybinds" toggle;
+-- it is now the single implementation, driven by the rewired LibKeyBound
+-- "Binding Mode" dialog checkbox. `enable` true => character set (2), false =>
+-- account set (1). Immediate and committed (SaveBindings is part of the
+-- transition), matching the old options-panel toggle's behaviour.
+function BT4KC:SetCharacterSpecific(enable)
+	if InCombatLockdown() then return end
+
+	-- Raw integer set ids: account == 1, character == 2.
+	local targetSet  = enable and 2 or 1
+	local currentSet = GetCurrentBindingSet() or 1
+
+	if targetSet == currentSet then
+		-- Already in desired state (e.g., stale checkbox); just refresh.
+		if enable then
+			Bartender4.db.char.charBindingsInitialized = true
+		end
+		LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
 		return
 	end
-	if not self.options then
-		self.options = {
-			type = "group",
-			name = L["Copy Keybinds from Character"],
-			guiInline = true,
-			hidden = function() return (GetCurrentBindingSet() or 1) ~= 2 end,
-			args = {
-				note = {
-					order = 1,
-					type = "description",
-					name = L["Copy Bartender4 keybindings from another character. The source character must have logged in at least once with this version of Bartender4.\n"],
-				},
-				source = {
-					order = 2,
-					type = "select",
-					name = L["Source Character"],
-					desc = L["Select the character to copy keybindings from."],
-					width = "full",
-					get = function()
-						local source = Bartender4.db.profile.keybindCopySource
-						if not source then return nil end
-						local chars = self:GetAvailableCharacters()
-						return chars[source] and source or nil
-					end,
-					set = function(info, value) Bartender4.db.profile.keybindCopySource = value end,
-					values = function()
-						return self:GetAvailableCharacters()
-					end,
-				},
-				copy = {
-					order = 3,
-					type = "execute",
-					name = L["Copy Keybinds"],
-					desc = L["Copy keybindings from the selected character. This will overwrite your current Bartender4 keybindings."],
-					disabled = function()
-						return not Bartender4.db.profile.keybindCopySource or InCombatLockdown()
-					end,
-					func = function()
-						local source = Bartender4.db.profile.keybindCopySource
-						if source then
-							-- Capture the current binding set at popup-open time and pass
-							-- it through `data` so OnAccept can verify the user hasn't
-							-- toggled between Show and accept.
-							local popupData = { charKey = source, expectedSet = GetCurrentBindingSet() or 1 }
-							StaticPopup_Show("BARTENDER4_CONFIRM_KEYBIND_COPY", source, nil, popupData)
-						end
-					end,
-				},
-			},
-		}
+
+	-- Suppress the ActionBars:ReassignBindings -> SaveBindings cascade during
+	-- the whole transition. Each SetBinding / LoadBindings call below fires
+	-- UPDATE_BINDINGS, and a cascade SaveBindings firing between LoadBindings(N)
+	-- and the trailing SaveBindings(N) could persist to the wrong on-disk slot.
+	-- Save-and-restore (not nil-out) so a nested transition's outer suppression
+	-- isn't cancelled by the inner clear. pcall + restore keeps the flag from
+	-- sticking on error.
+	local _prevSuppress = Bartender4._suppressBindingCascade
+	Bartender4._suppressBindingCascade = true
+	local _ok, _err = pcall(function()
+	if enable and not Bartender4.db.char.charBindingsInitialized then
+		-- First-time activation: snapshot current (account) bindings and copy
+		-- them onto set 2. The init flag is what stops a later toggle OFF->ON
+		-- from overwriting character-specific customizations (bindings imported
+		-- via "Copy Keybinds from Character" or rebound while set 2 was active).
+		-- To force a re-copy after the first activation (e.g. to recover from a
+		-- corrupted set 2 left by older buggy code), run
+		--   /run Bartender4.db.char.charBindingsInitialized = false
+		-- then toggle OFF and ON.
+		--
+		-- Use GetBindingKey (up to 4 keys) instead of GetBinding's 2-key tuple
+		-- -- the original v0 snapshot loop only captured key1/key2 and is the
+		-- most likely source of historical alt-slot wipes on this character.
+		local snapshot = {}
+		for i = 1, GetNumBindings() do
+			local command = GetBinding(i)
+			if command then
+				local k1, k2, k3, k4 = GetBindingKey(command)
+				if k1 or k2 or k3 or k4 then
+					snapshot[command] = { k1, k2, k3, k4 }
+				end
+			end
+		end
+
+		-- Activate set 2 BEFORE the restore loop. Each SetBinding fires
+		-- UPDATE_BINDINGS, and ActionBars:ReassignBindings may call
+		-- SaveBindings(GetCurrentBindingSet()). Activating set 2 first
+		-- guarantees those cascading writes hit disk[2] and cannot corrupt the
+		-- account set on disk[1].
+		SaveBindings(1)
+		LoadBindings(2)
+		SaveBindings(2)
+
+		-- Clear EVERY key currently bound in set 2's in-memory state before
+		-- applying the snapshot. A per-command unbind would leak bindings for
+		-- commands present in set 2's loaded disk state but absent from the
+		-- snapshot. The clear also guarantees slot order on re-apply:
+		-- SetBinding's slot-fill behaviour when a command already has bindings
+		-- is opaque, and that was the observed alt-slot wipe.
+		for i = 1, GetNumBindings() do
+			local command = GetBinding(i)
+			if command then
+				local e1, e2, e3, e4 = GetBindingKey(command)
+				if e1 and e1 ~= "" then SetBinding(e1) end
+				if e2 and e2 ~= "" then SetBinding(e2) end
+				if e3 and e3 ~= "" then SetBinding(e3) end
+				if e4 and e4 ~= "" then SetBinding(e4) end
+			end
+		end
+
+		for command, keys in pairs(snapshot) do
+			for i = 1, 4 do
+				local key = keys[i]
+				if key and key ~= "" then
+					SetBinding(key, command)
+				end
+			end
+		end
+
+		SaveBindings(2)
+		Bartender4.db.char.charBindingsInitialized = true
+	elseif enable then
+		-- Subsequent activation: restore the user's previously-saved set 2 from
+		-- disk. Preserves character-specific customizations across OFF/ON.
+		SaveBindings(1)
+		LoadBindings(2)
+		SaveBindings(2)
+	else
+		-- Switching character -> account. Flush set 2 (preserve in-memory edits
+		-- since the last save), then load and activate set 1.
+		SaveBindings(2)
+		LoadBindings(1)
+		SaveBindings(1)
 	end
-	Bartender4:RegisterModuleOptions("KeyBindCopy", self.options)
+	end)
+	Bartender4._suppressBindingCascade = _prevSuppress
+	if not _ok then
+		-- Surface to BugSack / scriptErrors AND show a clean in-game summary.
+		(geterrorhandler() or function() end)(_err)
+		Bartender4:Print(L["Internal error during binding-set transition; your bindings may be in a partial state. See the error log for details."])
+	end
+
+	LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
+end
+
+-- Promote: write the current set-2 in-memory bindings into disk[1] so the
+-- account set matches the character set, then reactivate set 2. After this,
+-- toggling per-character OFF preserves the user's bindings (both sets in sync).
+-- Ported verbatim from the former Options.lua "Copy Character Keybinds to
+-- Account" button.
+function BT4KC:PromoteCharToAccount()
+	if InCombatLockdown() then return end
+	if (GetCurrentBindingSet() or 1) ~= 2 then return end
+	local _prevSuppress = Bartender4._suppressBindingCascade
+	Bartender4._suppressBindingCascade = true
+	local _ok, _err = pcall(function()
+		SaveBindings(1)  -- memory->disk[1]; this also activates set 1
+		LoadBindings(2)  -- memory<-disk[2] (should equal current memory)
+		SaveBindings(2)  -- reactivate set 2
+	end)
+	Bartender4._suppressBindingCascade = _prevSuppress
+	if not _ok then
+		(geterrorhandler() or function() end)(_err)
+		Bartender4:Print(L["Internal error during keybind promote; your bindings may be in a partial state. See the error log for details."])
+	end
+	LibStub("AceConfigRegistry-3.0"):NotifyChange("Bartender4")
+end
+
+-- LibKeyBound fires LIBKEYBOUND_ENABLED on every Activate() (every time the
+-- "Binding Mode" dialog opens). By then LibKeyBound:Initialize() has created
+-- the global KeyboundDialog frame, so this is the safe point to lazily (once)
+-- attach our controls and (every open) refresh their state.
+function BT4KC:OnKeyBoundEnabled()
+	if UNSUPPORTED then return end
+	self:EnsureKeyboundDialogUI()
+	self:RefreshKeyboundDialogUI()
+end
+
+local function BuildSourceMenu(_, level)
+	if not level then return end
+	local chars = BT4KC:GetAvailableCharacters()
+	local keys = {}
+	for k in pairs(chars) do keys[#keys + 1] = k end
+	sort(keys)
+	for _, key in ipairs(keys) do
+		local info = UIDropDownMenu_CreateInfo()
+		info.text = key
+		info.notCheckable = true
+		info.func = function()
+			-- Reuse the existing confirm path. Capture the binding set at
+			-- popup-open time so OnAccept can detect a mid-dialog toggle
+			-- (StaticPopup_Show is async).
+			local popupData = { charKey = key, expectedSet = (GetCurrentBindingSet() or 1) }
+			StaticPopup_Show("BARTENDER4_CONFIRM_KEYBIND_COPY", key, nil, popupData)
+			CloseDropDownMenus()
+		end
+		UIDropDownMenu_AddButton(info, level)
+	end
+end
+
+-- Build (once) the controls attached to LibKeyBound's "Binding Mode" dialog,
+-- and rewire the dialog's stock "Character Specific Keybindings" checkbox to
+-- the fork-safe transition. Idempotent: guarded by _kbUIBuilt.
+function BT4KC:EnsureKeyboundDialogUI()
+	if self._kbUIBuilt then return end
+	local dialog = _G.KeyboundDialog
+	if not dialog then return end  -- retry on a later LIBKEYBOUND_ENABLED
+
+	-- Annex: a child panel hung directly below the stock dialog. Parenting to
+	-- the dialog makes it show/hide and drag with it; anchoring BELOW it means
+	-- we never reflow LibKeyBound's own widgets (keeps the lib pristine -- the
+	-- whole reason this lives addon-side instead of in the library).
+	local annex = CreateFrame("Frame", "BT4KCKeyboundAnnex", dialog,
+		BackdropTemplateMixin and "BackdropTemplate" or nil)
+	annex:SetFrameStrata("DIALOG")
+	annex:SetPoint("TOPLEFT", dialog, "BOTTOMLEFT", 0, 4)
+	annex:SetPoint("TOPRIGHT", dialog, "BOTTOMRIGHT", 0, 4)
+	annex:SetHeight(86)
+	-- The dialog is SetClampedToScreen(true) but the annex hangs ~90px BELOW
+	-- it; without extending the clamp, the annex (its only controls) can be
+	-- dragged off the bottom of the screen and become unreachable. Negative
+	-- bottom inset moves the clamp boundary outward to cover the child.
+	dialog:SetClampRectInsets(0, 0, 0, -90)
+	annex:SetBackdrop{
+		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+		tile = true,
+		insets = { left = 11, right = 12, top = 12, bottom = 11 },
+		tileSize = 32,
+		edgeSize = 32,
+	}
+
+	local promoteBtn = CreateFrame("Button", "BT4KCPromoteButton", annex, "UIPanelButtonTemplate")
+	promoteBtn:SetHeight(22)
+	promoteBtn:SetPoint("TOPLEFT", annex, "TOPLEFT", 16, -16)
+	promoteBtn:SetPoint("TOPRIGHT", annex, "TOPRIGHT", -16, -16)
+	promoteBtn:SetText(L["Copy Character Keybinds to Account"])
+	promoteBtn:SetScript("OnClick", function()
+		if InCombatLockdown() then
+			Bartender4:Print(L["Cannot copy keybindings during combat."])
+			return
+		end
+		StaticPopup_Show("BARTENDER4_CONFIRM_PROMOTE_KEYBINDS")
+	end)
+
+	local copyFromBtn = CreateFrame("Button", "BT4KCCopyFromButton", annex, "UIPanelButtonTemplate")
+	copyFromBtn:SetHeight(22)
+	copyFromBtn:SetPoint("TOPLEFT", promoteBtn, "BOTTOMLEFT", 0, -8)
+	copyFromBtn:SetPoint("TOPRIGHT", promoteBtn, "BOTTOMRIGHT", 0, -8)
+	copyFromBtn:SetText(L["Copy Keybinds from Character"])
+
+	local sourceMenu = CreateFrame("Frame", "BT4KCSourceMenu", UIParent, "UIDropDownMenuTemplate")
+	copyFromBtn:SetScript("OnClick", function(btn)
+		if InCombatLockdown() then
+			Bartender4:Print(L["Cannot copy keybindings during combat."])
+			return
+		end
+		if not next(BT4KC:GetAvailableCharacters()) then return end
+		UIDropDownMenu_Initialize(sourceMenu, BuildSourceMenu, "MENU")
+		ToggleDropDownMenu(1, nil, sourceMenu, btn, 0, 0)
+	end)
+
+	self._kbAnnex = annex
+	self._promoteBtn = promoteBtn
+	self._copyFromBtn = copyFromBtn
+
+	-- Rewire the stock "Character Specific Keybindings" checkbox to the
+	-- fork-safe transition (snapshot / clear / cascade-suppress / init-flag),
+	-- replacing LibKeyBound's naive LoadBindings/SaveBindings. SetScript (not
+	-- HookScript) so the unsafe stock handler does NOT also run.
+	--
+	-- UICheckButtonTemplate flips :GetChecked() BEFORE OnClick, so it already
+	-- reflects the user's intended new state. SetCharacterSpecific performs an
+	-- immediate, committed transition; RefreshKeyboundDialogUI then re-derives
+	-- the checkbox from the *actual* active set, so combat / no-op / failure
+	-- snaps the visual back to truth.
+	--
+	-- LibKeyBound's own Okay (SaveBindings(set)) / Cancel
+	-- (LoadBindings(GetCurrentBindingSet())) recompute their target at click
+	-- time, so leaving them untouched is safe: after our transition the active
+	-- set already equals the checkbox state, so Okay is a redundant re-save and
+	-- Cancel only discards in-mode key edits, never the set switch (consistent
+	-- with the fork's "toggle is immediate" model).
+	local check = _G.KeyboundDialogCheck
+	if check then
+		check:SetScript("OnClick", function(cb)
+			BT4KC:SetCharacterSpecific(cb:GetChecked() and true or false)
+			BT4KC:RefreshKeyboundDialogUI()
+		end)
+	end
+
+	-- Refresh whenever the dialog goes hidden->shown (a genuine reopen, and
+	-- the combat-end Hide -> next Show cycle). This does NOT cover combat
+	-- entered while the dialog is already visible (:Show() on a shown frame
+	-- fires no OnShow) -- the PLAYER_REGEN_* handlers (OnEnable) cover that.
+	-- HookScript is additive: LibKeyBound's own OnShow (a sound) still runs.
+	dialog:HookScript("OnShow", function() BT4KC:RefreshKeyboundDialogUI() end)
+
+	self._kbUIBuilt = true
+end
+
+-- Re-derive every dynamic bit of the dialog UI from the *actual* engine state:
+-- the checkbox from the active binding set, the buttons' enabled state from
+-- combat / set / available-source-character. Called on dialog open, after the
+-- checkbox toggle, and after a copy completes.
+function BT4KC:RefreshKeyboundDialogUI()
+	if not self._kbUIBuilt then return end
+	-- Nothing visible to refresh if the dialog is off-screen; this also makes
+	-- the PLAYER_REGEN_* handlers free outside an open binding session.
+	local _kbd = _G.KeyboundDialog
+	if not _kbd or not _kbd:IsShown() then return end
+	local onSet2 = (GetCurrentBindingSet() or 1) == 2
+	local combat = InCombatLockdown()
+
+	local check = _G.KeyboundDialogCheck
+	if check then check:SetChecked(onSet2) end
+
+	if self._promoteBtn then
+		if (not combat) and onSet2 then
+			self._promoteBtn:Enable()
+		else
+			self._promoteBtn:Disable()
+		end
+	end
+	if self._copyFromBtn then
+		-- Parity with the old AceConfig group, which was hidden unless set 2
+		-- was active: copying a source character's bindings while on set 1
+		-- would overwrite the account-wide set, which is not the intent.
+		local hasChars = next(self:GetAvailableCharacters()) ~= nil
+		if (not combat) and onSet2 and hasChars then
+			self._copyFromBtn:Enable()
+		else
+			self._copyFromBtn:Disable()
+		end
+	end
 end
