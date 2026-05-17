@@ -91,6 +91,13 @@ local defaults = {
 		savedBindings = {},
 		charBindingsInitialized = false,
 	},
+	global = {
+		-- [fufu] Keybind Import/Export (Phase 1): account-wide named keybind
+		-- sets. [name] = { bindings = { [action]={k1..k4} }, meta = {...} }.
+		-- Same shape as db.char.savedBindings so the existing hardened
+		-- DoApplyBindings path consumes a named set unchanged (CLAUDE.md #2).
+		savedKeybindSets = {},
+	},
 }
 
 Bartender4.CONFIG_VERSION = 3

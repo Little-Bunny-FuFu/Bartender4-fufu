@@ -27,6 +27,18 @@ externals:
   libs/LibSharedMedia-3.0: https://repos.wowace.com/wow/libsharedmedia-3-0/trunk/LibSharedMedia-3.0
   libs/LibDualSpec-1.0: https://repos.wowace.com/wow/libdualspec-1-0
   libs/LibClassicSpellActionCount-1.0: https://github.com/Ennea/LibClassicSpellActionCount-1.0.git
+  # [fufu] LibDeflate / LibSerialize: the WoWAce SVN trunk paths
+  # (repos.wowace.com/wow/libdeflate|libserialize/trunk/...) 404 as of
+  # 2026-05-16; pull canonical GitHub source pinned to the exact release
+  # tag vendored on disk (same git-URL precedent as
+  # LibClassicSpellActionCount-1.0 above). Generic upstream mirrors, NOT
+  # fork-owned: gitignored + external present (safe-state per .gitignore).
+  libs/LibDeflate:
+    url: https://github.com/SafeteeWoW/LibDeflate.git
+    tag: 1.0.2-release
+  libs/LibSerialize:
+    url: https://github.com/rossnichols/LibSerialize.git
+    tag: v1.2.1
 
 ignore:
   - .travis.yml

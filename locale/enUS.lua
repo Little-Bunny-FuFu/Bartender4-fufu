@@ -356,3 +356,45 @@ L["Per-character keybinds are not supported on this WoW client."] = true
 L["Internal error during binding-set transition; your bindings may be in a partial state. See the error log for details."] = true
 L["Internal error during keybind promote; your bindings may be in a partial state. See the error log for details."] = true
 L["Internal error during keybind copy; your bindings may be in a partial state. See the error log for details."] = true
+
+-- Bartender4-fufu Keybind Import/Export (Phase 1)
+L["Keybind import/export libraries are missing."] = true
+L["No import string provided."] = true
+L["Import string is too large."] = true
+L["This is not a Bartender4-fufu keybind string."] = true
+L["This keybind string was made with a different version of Bartender4-fufu."] = true
+L["Import string is corrupt or truncated."] = true
+L["This keybind string is not valid or is for a different feature."] = true
+
+-- Bartender4-fufu Keybind picker (Phase 1, Step 5)
+L["Set"] = true
+L["Characters"] = true
+L["Saved Sets"] = true
+-- Bartender4-fufu apply guard (review H-001)
+L["Keybind copy/import requires per-character keybinds to be active."] = true
+
+-- Bartender4-fufu Keybind Import/Export window (Phase 1, Step 6)
+L["Bartender4-fufu Keybind Import/Export"] = true
+L["All bars"] = true
+L["Bars to export"] = true
+L["Keybind string"] = true
+L["Export"] = true
+L["Import"] = true
+L["No keybindings to export for the current selection."] = true
+L["Save as named set"] = true
+L["Save selection as set"] = true
+L["Save pasted string as set"] = true
+L["Nothing to save for the current selection."] = true
+L["Saved keybind set '%s'."] = true
+L["Invalid set name."] = true
+L["Importing replaces the keybinds on every action the string covers AND every Bartender4 action on this character (a single-bar string still re-derives via that union). Requires per-character keybinds (set 2); blocked in combat."] = true
+L["Import these keybindings? This replaces your current Bartender4 keybinds on this character. This cannot be undone."] = true
+L["Could not import keybindings."] = true
+L["Keybindings imported (%d failed)."] = true
+L["Keybindings imported."] = true
+L["A keybind set named '%s' already exists. Overwrite it?"] = true
+
+-- Bartender4-fufu Profiles-tab launcher (Phase 1, Step 7)
+L["Keybindings"] = true
+L["Export your Bartender4 keybindings to a shareable string, import one, or save named sets you can pick from the binding-mode 'Copy from' menu."] = true
+L["Import/Export Keybindings"] = true

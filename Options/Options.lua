@@ -377,6 +377,25 @@ local function generateOptions()
 		},
 	}
 	Bartender4.options.plugins.profiles = { profiles = LibStub("AceDBOptions-3.0"):GetOptionsTable(Bartender4.db) }
+	local profArgs = Bartender4.options.plugins.profiles.profiles.args
+	-- [fufu] Keybind Import/Export launcher. This DELIBERATELY re-introduces
+	-- an AceConfig contribution from the keybind feature -- it is NOT a
+	-- regression of the keybind-copy relocation (which removed the
+	-- binding-mode-adjacent AceConfig group + KeyBindCopy:SetupOptions). This
+	-- is a profile DATA-MANAGEMENT surface, a deliberately different place; do
+	-- not "restore" its removal. Spliced here (inside generateOptions, after
+	-- the profiles plugin is built, before getOptions is GCed) so it renders
+	-- at the BOTTOM of the Profiles tab. Phase 2 ("Import/Export ALL
+	-- settings") belongs here too as fufuAllSettingsIO_* at order ~910,
+	-- reusing the Step 2 LibSerialize/LibDeflate pipeline with a different
+	-- payload `kind` -- DO NOT implement Phase 2 now.
+	profArgs.fufuKeybindIO_header = { type = "header", name = L["Keybindings"], order = 900 }
+	profArgs.fufuKeybindIO_desc = { type = "description", name = L["Export your Bartender4 keybindings to a shareable string, import one, or save named sets you can pick from the binding-mode 'Copy from' menu."], order = 901 }
+	profArgs.fufuKeybindIO_btn = {
+		type = "execute", order = 902,
+		name = L["Import/Export Keybindings"],
+		func = function() Bartender4:GetModule("KeyBindCopy"):OpenImportExportWindow() end,
+	}
 	for k,v in Bartender4:IterateModules() do
 		if v.SetupOptions then
 			v:SetupOptions()

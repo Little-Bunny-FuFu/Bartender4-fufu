@@ -42,8 +42,10 @@ libs/CallbackHandler-1.0/
 libs/LibButtonGlow-1.0/
 libs/LibClassicSpellActionCount-1.0/
 libs/LibDBIcon-1.0/
+libs/LibDeflate/
 libs/LibDualSpec-1.0/
 libs/LibKeyBound-1.0/
+libs/LibSerialize/
 libs/LibSharedMedia-3.0/
 libs/LibStub/
 libs/LibWindow-1.1/

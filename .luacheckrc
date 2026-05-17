@@ -15,7 +15,7 @@ ignore = {
 	"311", -- Value assigned to a local variable is unused
 	"542", -- empty if branch
 	"613", -- [fufu] trailing whitespace inside an upstream BT4 localized long-string (locale/enUS.lua); not ours to reflow
-	"231/bindingFailed", -- [fufu] pre-existing write-only var in CopyBindingsFrom; logic deliberately untouched
+	"231/bindingFailed", -- [fufu] write-only var in DoApplyBindings (extracted from CopyBindingsFrom, Step 3); logic deliberately untouched
 }
 
 globals = {
@@ -221,5 +221,6 @@ read_globals = {
 	"UIDropDownMenu_Initialize",
 	"UIErrorsFrame",
 	"UnitName",
+	"time", -- [fufu] epoch for SaveKeybindSet meta.created
 	"geterrorhandler",
 }
