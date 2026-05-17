@@ -78,6 +78,10 @@ end
 function PetBarMod:ReassignBindings()
 	if InCombatLockdown() then return end
 	if not self.bar or not self.bar.buttons then return end
+	if Bartender4._suppressBindingCascade then
+		Bartender4._reassignPending = true
+		return
+	end
 	ClearOverrideBindings(self.bar)
 
 	if not WoWRetail then

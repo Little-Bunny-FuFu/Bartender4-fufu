@@ -349,6 +349,10 @@ function BT4KC:CopyBindingsFrom(charKey, expectedSet)
 		SaveBindings(GetCurrentBindingSet() or 1)
 	end)
 	Bartender4._suppressBindingCascade = prevSuppress
+	if not prevSuppress then
+		local AB = Bartender4:GetModule("ActionBars", true)
+		if AB and AB.FlushPendingReassign then AB:FlushPendingReassign() end
+	end
 	if not ok then
 		-- Surface to BugSack / BugGrabber / scriptErrors so the error and its
 		-- traceback are captured. Then print a fork-specific chat summary so
@@ -478,6 +482,10 @@ function BT4KC:SetCharacterSpecific(enable)
 	end
 	end)
 	Bartender4._suppressBindingCascade = _prevSuppress
+	if not _prevSuppress then
+		local AB = Bartender4:GetModule("ActionBars", true)
+		if AB and AB.FlushPendingReassign then AB:FlushPendingReassign() end
+	end
 	if not _ok then
 		-- Surface to BugSack / scriptErrors AND show a clean in-game summary.
 		(geterrorhandler() or function() end)(_err)
@@ -503,6 +511,10 @@ function BT4KC:PromoteCharToAccount()
 		SaveBindings(2)  -- reactivate set 2
 	end)
 	Bartender4._suppressBindingCascade = _prevSuppress
+	if not _prevSuppress then
+		local AB = Bartender4:GetModule("ActionBars", true)
+		if AB and AB.FlushPendingReassign then AB:FlushPendingReassign() end
+	end
 	if not _ok then
 		(geterrorhandler() or function() end)(_err)
 		Bartender4:Print(L["Internal error during keybind promote; your bindings may be in a partial state. See the error log for details."])

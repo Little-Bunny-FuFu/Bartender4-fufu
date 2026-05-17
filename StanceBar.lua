@@ -79,6 +79,10 @@ end
 function StanceBarMod:ReassignBindings()
 	if InCombatLockdown() then return end
 	if not self.bar or not self.bar.buttons then return end
+	if Bartender4._suppressBindingCascade then
+		Bartender4._reassignPending = true
+		return
+	end
 	ClearOverrideBindings(self.bar)
 	for i = 1, min(#self.bar.buttons, 10) do
 		local button, real_button = ("SHAPESHIFTBUTTON%d"):format(i), ("BT4StanceButton%d"):format(i)

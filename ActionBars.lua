@@ -163,6 +163,7 @@ function BT4ActionBars:OnEnable()
 	end
 
 	self:RegisterEvent("UPDATE_BINDINGS", "ReassignBindings")
+	self:RegisterEvent("PLAYER_REGEN_ENABLED", "FlushPendingReassign")
 	self:ReassignBindings()
 
 	LSM.RegisterCallback(self, "LibSharedMedia_Registered", function(mtype, key)
@@ -287,6 +288,10 @@ end
 local s_inReassignBindings = false
 function BT4ActionBars:ReassignBindings()
 	if InCombatLockdown() or s_inReassignBindings or self.InHousing then return end
+	if Bartender4._suppressBindingCascade then
+		Bartender4._reassignPending = true
+		return
+	end
 	s_inReassignBindings = true
 
 	-- pcall-wrap the body so an error in any step doesn't leave
@@ -306,8 +311,9 @@ function BT4ActionBars:ReassignBindings()
 					ClearOverrideBindings(frame)
 					for i = 1,min(#frame.buttons, 12) do
 						local button, real_button = mapping:format(i), frame.buttons[i]:GetName()
-						for k=1, select('#', GetBindingKey(button)) do
-							local key = select(k, GetBindingKey(button))
+						local b1, b2, b3, b4 = GetBindingKey(button)
+						for k=1, select('#', b1, b2, b3, b4) do
+							local key = select(k, b1, b2, b3, b4)
 							if key and key ~= "" then
 								SetOverrideBindingClick(frame, false, key, real_button, "Keybind")
 							end
@@ -319,7 +325,7 @@ function BT4ActionBars:ReassignBindings()
 
 		-- re-assign bindings from LeftButton to Keybind buttons
 		local needSaving = false
-		for i = 1,180 do
+		for i = 1, LIST_ACTIONBARS[#LIST_ACTIONBARS] * 12 do   -- 180 Retail / 120 Classic
 			local button = ("BT4Button%d"):format(i)
 			local clickbutton = ("CLICK %s:LeftButton"):format(button)
 			if MigrateKeybindBindings(button, GetBindingKey(clickbutton)) then
@@ -343,7 +349,17 @@ function BT4ActionBars:ReassignBindings()
 	end)
 
 	s_inReassignBindings = false
+	Bartender4._reassignPending = nil
 	if not ok then error(err, 0) end
+end
+
+function BT4ActionBars:FlushPendingReassign()
+	if not Bartender4._reassignPending then return end
+	self:ReassignBindings()
+	local pet = Bartender4:GetModule("PetBar", true)
+	if pet and pet.ReassignBindings then pet:ReassignBindings() end
+	local stance = Bartender4:GetModule("StanceBar", true)
+	if stance and stance.ReassignBindings then stance:ReassignBindings() end
 end
 
 BT4ActionBars.BLIZZARD_BAR_MAP = {
