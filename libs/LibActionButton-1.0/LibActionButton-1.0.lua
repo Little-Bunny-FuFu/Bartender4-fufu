@@ -3184,10 +3184,30 @@ Spell.GetLoCCooldownInfo       = function(self) return GetSpellLossOfControlCool
 Spell.IsAttack                 = function(self) local slot = FindSpellBookSlotBySpellID(self._state_action) return slot and IsAttackSpell(slot, BOOKTYPE_SPELL) or nil end
 Spell.IsEquipped               = function(self) return nil end
 Spell.IsCurrentlyActive        = function(self) return IsCurrentSpell(self._state_action) end
-Spell.IsAutoRepeat             = function(self) local slot = FindSpellBookSlotBySpellID(self._state_action) return slot and IsAutoRepeatSpell(slot, BOOKTYPE_SPELL) or nil end
+-- [fufu fix] The C_Spell shims above take a spellIdentifier, but IsAutoRepeat
+-- and IsUnitInRange kept the removed slot-based arity (slot, BOOKTYPE_SPELL,
+-- ...), so the slot index was read as a spellID -> nil returns -> flyout
+-- range coloring and auto-repeat detection silently dead on retail. Pass the
+-- spellID directly on the C_Spell path; the slot path remains for clients
+-- without the C_Spell members. (IsAttack is correct as-is: its shim resolves
+-- to the slot-based C_SpellBook.IsAutoAttackSpellBookItem.)
+Spell.IsAutoRepeat             = function(self)
+	if C_Spell and C_Spell.IsAutoRepeatSpell then
+		return C_Spell.IsAutoRepeatSpell(self._state_action)
+	end
+	local slot = FindSpellBookSlotBySpellID(self._state_action)
+	return slot and IsAutoRepeatSpell(slot, BOOKTYPE_SPELL) or nil
+end
 Spell.IsUsable                 = function(self) return IsSpellUsable(self._state_action) end
 Spell.IsConsumableOrStackable  = function(self) return IsConsumableSpell(self._state_action) end
-Spell.IsUnitInRange            = function(self, unit) local slot = FindSpellBookSlotBySpellID(self._state_action) return slot and IsSpellInRange(slot, BOOKTYPE_SPELL, unit) or nil end
+Spell.IsUnitInRange            = function(self, unit)
+	-- [fufu fix] see IsAutoRepeat above: spellID arity on the C_Spell path.
+	if C_Spell and C_Spell.IsSpellInRange then
+		return C_Spell.IsSpellInRange(self._state_action, unit)
+	end
+	local slot = FindSpellBookSlotBySpellID(self._state_action)
+	return slot and IsSpellInRange(slot, BOOKTYPE_SPELL, unit) or nil
+end
 Spell.SetTooltip               = function(self) return GameTooltip:SetSpellByID(self._state_action) end
 Spell.GetSpellId               = function(self) return self._state_action end
 

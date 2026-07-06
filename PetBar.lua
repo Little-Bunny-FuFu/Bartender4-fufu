@@ -76,7 +76,12 @@ function PetBarMod:OnEnable()
 end
 
 function PetBarMod:ReassignBindings()
-	if InCombatLockdown() then return end
+	if InCombatLockdown() then
+		-- fufu: mark pending so FlushPendingReassign re-runs this at combat
+		-- end (a combat-blocked pass previously vanished outright).
+		Bartender4._reassignPending = true
+		return
+	end
 	if not self.bar or not self.bar.buttons then return end
 	if Bartender4._suppressBindingCascade then
 		Bartender4._reassignPending = true

@@ -287,7 +287,17 @@ end
 
 local s_inReassignBindings = false
 function BT4ActionBars:ReassignBindings()
-	if InCombatLockdown() or s_inReassignBindings or self.InHousing then return end
+	if InCombatLockdown() then
+		-- fufu: a combat-blocked pass previously vanished outright (the
+		-- pending flag was only set on the suppress branch below), so after a
+		-- /reload during combat every override bind stayed dead until an
+		-- unrelated out-of-combat UPDATE_BINDINGS. Mark pending so
+		-- FlushPendingReassign (PLAYER_REGEN_ENABLED, registered at :166)
+		-- re-runs this when combat ends.
+		Bartender4._reassignPending = true
+		return
+	end
+	if s_inReassignBindings or self.InHousing then return end
 	if Bartender4._suppressBindingCascade then
 		Bartender4._reassignPending = true
 		return

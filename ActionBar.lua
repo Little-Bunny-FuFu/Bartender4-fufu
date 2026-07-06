@@ -14,8 +14,15 @@ local WoW10 = select(4, GetBuildInfo()) >= 100000
 local tonumber, format, min = tonumber, format, min
 
 local GetSpellBookItemInfo = GetSpellBookItemInfo
+-- fufu: spell-type sentinel matched to whichever API the shim resolves to.
+-- C_SpellBook.GetSpellBookItemType returns a NUMERIC Enum.SpellBookItemType,
+-- so SetupSmartTarget's compare against the legacy string "SPELL" never
+-- matched on retail and BT_Spell_Overrides stayed empty (smart-target
+-- overrides silently inert beyond the two hardcoded wild-charge entries).
+local SPELLBOOK_SPELL_TYPE = "SPELL"
 if C_SpellBook and C_SpellBook.GetSpellBookItemType then
 	GetSpellBookItemInfo = function(index, book) assert(book == "spell") return C_SpellBook.GetSpellBookItemType(index, Enum.SpellBookSpellBank.Player) end
+	SPELLBOOK_SPELL_TYPE = Enum.SpellBookItemType.Spell
 end
 
 -- GLOBALS: UIParent, VehicleExit
@@ -201,7 +208,7 @@ function ActionBar:SetupSmartTarget()
 	local i = 1
 	local subtype, action, spellId = GetSpellBookItemInfo(i, "spell")
 	while subtype do
-		if subtype == "SPELL" then
+		if subtype == SPELLBOOK_SPELL_TYPE then
 			if useOldSpellAPI then
 				spellId = select(7, GetSpellInfo(i, "spell"))
 			end
