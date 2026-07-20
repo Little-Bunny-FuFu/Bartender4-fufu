@@ -54,3 +54,6 @@ libs/LibWindow-1.1/
 # session-scoped data). Workspace repo above has its own .claude tracking
 # policy; this fork should carry none of it.
 .claude/
+
+# graphify knowledge-graph output (regenerable; rebuild: graphify update)
+graphify-out/
