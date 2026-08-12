@@ -1,4 +1,4 @@
-## Interface: 120005,120007,11508,50503,20505
+## Interface: 120005,120007,120100,11508,50503,20505
 
 ## Title: Bartender4-fufu
 ## Notes: Bartender4 fork with character keybind copy support

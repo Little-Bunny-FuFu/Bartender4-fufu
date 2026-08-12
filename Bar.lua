@@ -414,9 +414,9 @@ end
 
 local function MouseIsOverBar(bar)
 	local LABSpellFlyout = LAB:GetSpellFlyoutFrame()
-	if MouseIsOver(bar.overlay)
-	or (SpellFlyout and SpellFlyout:IsShown() and SpellFlyout:GetParent() and SpellFlyout:GetParent():GetParent() == bar and MouseIsOver(SpellFlyout))
-	or (LABSpellFlyout and LABSpellFlyout:IsShown() and LABSpellFlyout:GetParent() and LABSpellFlyout:GetParent():GetParent() == bar and MouseIsOver(LABSpellFlyout)) then
+	if bar.overlay:IsMouseOver()
+	or (SpellFlyout and SpellFlyout:IsShown() and SpellFlyout:GetParent() and SpellFlyout:GetParent():GetParent() == bar and SpellFlyout:IsMouseOver())
+	or (LABSpellFlyout and LABSpellFlyout:IsShown() and LABSpellFlyout:GetParent() and LABSpellFlyout:GetParent():GetParent() == bar and LABSpellFlyout:IsMouseOver()) then
 		return true
 	end
 	return false

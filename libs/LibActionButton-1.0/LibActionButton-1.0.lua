@@ -281,6 +281,14 @@ function lib:CreateButton(id, name, header, config)
 	button:SetScript("PreClick", Generic.PreClick)
 	button:SetScript("PostClick", Generic.PostClick)
 	button:SetScript("OnEvent", Generic.OnButtonEvent)
+	button:SetScript("OnAttributeChanged", nil) -- inherited templates bring in a handler here which we don't want, so get rid of it (upstream a24f3af / minor 148)
+
+	-- unwanted mixin functions, which we override through the metatable; the
+	-- plain member shadows the metatable and, on 12.1, Blizzard's mixin
+	-- HasAction returns false on LAB buttons -> Update() takes the empty-slot
+	-- branch -> SetAlpha(0) -> invisible-but-clickable bars (upstream d1c60c1
+	-- / minor 150, "Fixes a variety of behavior in 12.1")
+	button.HasAction = nil
 
 	button.id = id
 	button.header = header
@@ -730,6 +738,17 @@ end
 
 function Generic:UpdateAlpha()
 	UpdateCooldown(self)
+end
+
+-- 12.1: Blizzard's ActionBarButtonAssistedCombatRotationFrameMixin:OnUpdate now
+-- calls this method directly on the parent button (with events suppressed), so
+-- LAB buttons must provide it or every rotation-frame tick errors. Ported from
+-- upstream minor 155 (a87f39c).
+function Generic:OnActionBarSlotChanged()
+	if self._state_type == "action" then
+		ClearNewActionHighlight(self._state_action, true)
+	end
+	Update(self)
 end
 
 -----------------------------------------------------------
@@ -1477,8 +1496,7 @@ function OnEvent(frame, event, arg1, ...)
 					if button._state_type == "action" then
 						local action = tonumber(button._state_action)
 						if updateAll or (action and dirty[action]) then
-							ClearNewActionHighlight(button._state_action, true, false)
-							Update(button)
+							button:OnActionBarSlotChanged()
 						end
 					end
 				end

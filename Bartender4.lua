@@ -441,6 +441,11 @@ end
 
 Bartender4.modulePrototype = {}
 function Bartender4.modulePrototype:ToggleModule(info, value)
+	-- Modules without a per-module AceDB namespace (Presets, the fork's
+	-- KeyBindCopy) are not profile-toggleable; UpdateModuleConfigs calls this
+	-- on every module during profile switch/copy, so bail instead of indexing
+	-- a nil db (crashed when another addon drove CopyProfile on our AceDB).
+	if not self.db then return end
 	if value ~= nil then
 		self.db.profile.enabled = value
 	else
