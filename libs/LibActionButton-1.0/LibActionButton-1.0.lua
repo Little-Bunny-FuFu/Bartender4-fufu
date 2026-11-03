@@ -1717,9 +1717,11 @@ function OnEvent(frame, event, arg1, ...)
 		end
 	elseif event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW" then
 		-- [fufu perf] O(1) dispatch via the reverse maps instead of scanning
-		-- every ActiveButton. Also removes upstream's call to the undefined
-		-- global FlyoutHasSpell (still present in stock 168): any flyout button
-		-- on a bar + any proc glow threw a nil-call there.
+		-- every ActiveButton (and calling GetActionInfo + FlyoutHasSpell per
+		-- flyout button). FlyoutHasSpell is an undocumented C global that
+		-- Blizzard's own ActionButton.lua calls; it is NOT undefined (an older
+		-- note here claimed it was). Flyout membership comes from
+		-- FlyoutSpellButtons, keyed by base AND override slot spell IDs.
 		local set = SpellButtonMap[arg1]
 		if set then
 			for button in next, set do ShowOverlayGlow(button) end
@@ -2141,7 +2143,7 @@ function RebuildSpellButtonMap(self)
 		if success and numSlots then
 			local fl
 			for i = 1, numSlots do
-				local flySpellID, _, flyIsKnown = GetFlyoutSlotInfo(id, i)
+				local flySpellID, flyOverrideID, flyIsKnown = GetFlyoutSlotInfo(id, i)
 				-- Mirror UpdateFlyoutSpells' empty-pet suppression: an empty Call
 				-- Pet slot is hidden, so it must not seed a glow mapping.
 				if flySpellID then
@@ -2151,11 +2153,20 @@ function RebuildSpellButtonMap(self)
 					end
 				end
 				if flySpellID and flyIsKnown then
+					-- [fufu perf] Map the base ID and, when different, the
+					-- override ID: a proc may be reported under either
+					-- (Blizzard's tutorial helper matches both).
+					fl = fl or {}
 					local set = FlyoutSpellButtons[flySpellID]
 					if not set then set = {} FlyoutSpellButtons[flySpellID] = set end
 					set[self] = true
-					fl = fl or {}
 					fl[#fl + 1] = flySpellID
+					if flyOverrideID and flyOverrideID ~= flySpellID then
+						local oset = FlyoutSpellButtons[flyOverrideID]
+						if not oset then oset = {} FlyoutSpellButtons[flyOverrideID] = oset end
+						oset[self] = true
+						fl[#fl + 1] = flyOverrideID
+					end
 				end
 			end
 			if fl then

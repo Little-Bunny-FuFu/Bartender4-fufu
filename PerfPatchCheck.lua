@@ -23,8 +23,13 @@ f:RegisterEvent("PLAYER_LOGIN")
 f:SetScript("OnEvent", function(self)
 	self:UnregisterAllEvents()
 
-	local LAB = LibStub and LibStub("LibActionButton-1.0", true)
-	if LAB and not LAB._fufuPerfPatch then
+	-- Compare the marker to the MINOR that actually won the LibStub race: a
+	-- higher-versioned copy loaded AFTER ours reuses the same lib table, so the
+	-- marker survives while every patched method was overwritten. A bare
+	-- presence test would stay silent in that case.
+	local LAB, minor
+	if LibStub then LAB, minor = LibStub("LibActionButton-1.0", true) end
+	if LAB and LAB._fufuPerfPatch ~= minor then
 		local out = DEFAULT_CHAT_FRAME or ChatFrame1
 		if out then
 			out:AddMessage("|cffff2020Bartender4-fufu:|r the LibActionButton "
