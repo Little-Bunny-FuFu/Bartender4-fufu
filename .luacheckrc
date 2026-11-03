@@ -20,6 +20,7 @@ ignore = {
 
 globals = {
 	"_G",
+	"BT4AutoCastOverlayManager",
 	"UIPARENT_MANAGED_FRAME_POSITIONS",
 	"ShowPetActionBar",
 
@@ -44,6 +45,7 @@ read_globals = {
 	"hooksecurefunc",
 	"issecurevariable",
 	"CopyTable",
+	"tContains",
 	"tDeleteItem",
 	"table.wipe",
 
@@ -87,7 +89,7 @@ read_globals = {
 	"IsKeyRingEnabled",
 	"IsModifiedClick",
 	"IsPetAttackAction",
-	"MouseIsOver",
+	"Mixin",
 	"PickupPetAction",
 	"PlaySound",
 	"SaveBindings",
@@ -115,13 +117,14 @@ read_globals = {
 	"MainMenuBarVehicleLeaveButton_Update",
 	"NPE_LoadUI",
 	"RegisterStateDriver",
-	"SetDesaturation",
 	"Tutorials",
 	"UnregisterStateDriver",
 	"UpdateMicroButtonsParent",
 
 	-- FrameXML Frames
 	"AchievementMicroButton",
+	"AutoCastOverlayManager",
+	"AutoCastOverlayManagerMixin",
 	"BagsBar",
 	"CharacterMicroButton",
 	"CollectionsMicroButton",
@@ -142,6 +145,7 @@ read_globals = {
 	"MainMenuMicroButton",
 	"MainMenuBarVehicleLeaveButton",
 	"MicroButtonAndBagsBar",
+	"MicroMenuContainer",
 	"MultiBarBottomLeft",
 	"MultiBarBottomRight",
 	"MultiBarLeft",
@@ -186,6 +190,9 @@ read_globals = {
 	"LEAVE_VEHICLE",
 	"OKAY",
 	"SOUNDKIT",
+	"STATUS_BAR_CONTAINER_HEIGHT",
+	"STATUS_BAR_CONTAINER_WIDTH",
+	"STATUS_BAR_SIZE_ADJUSTMENT",
 	"WOW_PROJECT_ID",
 	"WOW_PROJECT_MAINLINE",
 	"WOW_PROJECT_CLASSIC",

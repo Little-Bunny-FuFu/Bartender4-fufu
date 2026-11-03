@@ -9,7 +9,6 @@ Bartender4.ActionBar = ActionBar
 
 local LAB10 = LibStub("LibActionButton-1.0")
 local LSM = LibStub("LibSharedMedia-3.0")
-local WoW10 = select(4, GetBuildInfo()) >= 100000
 
 local tonumber, format, min = tonumber, format, min
 
@@ -52,7 +51,7 @@ end
 
 -- Apply the specified config to the bar and refresh all settings
 function ActionBar:ApplyConfig(config)
-	if WoW10 then
+	if Bartender4.GameType.MainlineStandard then
 		WoW10Migration(config or self.config)
 	end
 
@@ -69,13 +68,13 @@ function ActionBar:SavePosition()
 	StateBar.SavePosition(self)
 
 	-- when we change a manual layout change, flag it for WoW10
-	if WoW10 then
+	if Bartender4.GameType.MainlineStandard then
 		self.config.WoW10Layout = true
 	end
 end
 
 function ActionBar:OnEvent(event, ...)
-	if event == "PLAYER_TALENT_UPDATE" or event == "PLAYER_SPECIALIZATION_CHANGED" or event == "LEARNED_SPELL_IN_TAB" or event == "LEARNED_SPELL_IN_SKILL_LINE" then
+	if event == "PLAYER_TALENT_UPDATE" or event == "PLAYER_SPECIALIZATION_CHANGED" or event == "LEARNED_SPELL_IN_SKILL_LINE" then
 		if InCombatLockdown() then
 			self.updateSmartTargetOnOutOfCombat = true
 		else
@@ -117,7 +116,6 @@ function ActionBar:UpdateButtonConfig()
 	self.buttonConfig.hideElements.border = (self.config.hideborder or self.config.skin.Zoom) and true or false
 
 	self.buttonConfig.showGrid = self.config.showgrid
-	self.buttonConfig.clickOnDown = Bartender4.db.profile.onkeydown
 	self.buttonConfig.flyoutDirection = self.config.flyoutDirection
 
 	self.buttonConfig.keyBoundClickButton = "Keybind"
@@ -304,7 +302,7 @@ function ActionBar:UpdateButtons(numbuttons, offset)
 		self:SetupSmartButton(buttons[i])
 
 		if i == 12 then
-			if WoW10 then
+			if Bartender4.Features.MainlineBarLayout then
 				buttons[i]:SetState(16, "custom", customExitButton)
 				buttons[i]:SetState(17, "custom", customExitButton)
 				buttons[i]:SetState(18, "custom", customExitButton)
@@ -333,6 +331,10 @@ function ActionBar:UpdateButtons(numbuttons, offset)
 	self.numbuttons = numbuttons
 	self.buttons = buttons
 	self.currentButtonOffset = offset
+
+	if buttons[1] then
+		self.button_width, self.button_height = buttons[1]:GetSize()
+	end
 
 	self:UpdateButtonLayout()
 	self:SetGrid()

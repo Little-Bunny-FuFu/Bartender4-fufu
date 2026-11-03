@@ -13,7 +13,7 @@ local table_concat, table_insert, tostring, assert, pairs, min, max = table.conc
 local setmetatable, tonumber = setmetatable, tonumber
 
 -- GLOBALS: SpellFlyout, UIParent, GameFontNormal
--- GLOBALS: CreateFrame, MouseIsOver, RegisterStateDriver, UnregisterStateDriver
+-- GLOBALS: CreateFrame, RegisterStateDriver, UnregisterStateDriver
 
 --[[===================================================================================
 	Universal Bar Contructor

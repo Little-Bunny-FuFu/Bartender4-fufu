@@ -54,11 +54,9 @@ _G.Bartender4 = Bartender4
 
 local L = LibStub("AceLocale-3.0"):GetLocale("Bartender4")
 
-local WoWClassicEra = (WOW_PROJECT_ID == WOW_PROJECT_CLASSIC)
-
 local LDB = LibStub("LibDataBroker-1.1", true)
 local LDBIcon = LibStub("LibDBIcon-1.0", true)
-local LibDualSpec = (not WoWClassicEra) and LibStub("LibDualSpec-1.0", true)
+local LibDualSpec = (not Bartender4.GameType.ClassicEra) and LibStub("LibDualSpec-1.0", true)
 
 local _G = _G
 local type, pairs, hooksecurefunc = type, pairs, hooksecurefunc
@@ -159,6 +157,14 @@ function Bartender4:OnInitialize()
 			self:SecureHook(EditModeManagerFrame.EnableSnapCheckButton, "SetControlChecked", "UpdateSnapFromEditMode")
 		end
 	end
+
+	if AutoCastOverlayManager and AutoCastOverlayManagerMixin then
+		BT4AutoCastOverlayManager = CreateFrame("Frame")
+		Mixin(BT4AutoCastOverlayManager, AutoCastOverlayManagerMixin)
+
+		BT4AutoCastOverlayManager:OnLoad()
+		BT4AutoCastOverlayManager:SetScript("OnUpdate", BT4AutoCastOverlayManager.OnUpdate)
+	end
 end
 
 function Bartender4:InitializeProfile()
@@ -166,7 +172,7 @@ function Bartender4:InitializeProfile()
 	if not self.finishedLoading then
 		PresetMod.applyBlizzardOnEnable = true
 	else
-		PresetMod:ResetProfile("BLIZZARD")
+		PresetMod:ResetProfile("DEFAULT")
 	end
 end
 

@@ -1,4 +1,4 @@
-## Interface: 120005,120007,120100,11508,50503,20505
+## Interface: 120100,120105,11509,50504,20506,16001
 
 ## Title: Bartender4-fufu
 ## Notes: Bartender4 fork with character keybind copy support
@@ -14,7 +14,8 @@
 ## X-License: All rights reserved.
 
 ## SavedVariables: Bartender4DB
-## OptionalDeps: Ace3, Masque, LibButtonGlow-1.0, LibActionButton-1.0, LibKeyBound-1.0, LibDBIcon-1.0, LibWindow-1.1, LibSharedMedia-3.0, AceGUI-3.0-SharedMediaWidgets, LibDualSpec-1.0, LibClassicSpellActionCount-1.0
+## OptionalDeps: [ExcludeLoadGameType vanilla] Ace3, Masque, LibButtonGlow-1.0, LibActionButton-1.0, LibKeyBound-1.0, LibDBIcon-1.0, LibWindow-1.1, LibSharedMedia-3.0, AceGUI-3.0-SharedMediaWidgets, LibDualSpec-1.0
+## OptionalDeps: [AllowLoadGameType vanilla] Ace3, Masque, LibButtonGlow-1.0, LibActionButton-1.0, LibKeyBound-1.0, LibDBIcon-1.0, LibWindow-1.1, LibSharedMedia-3.0, AceGUI-3.0-SharedMediaWidgets, LibClassicSpellActionCount-1.0
 
 #@no-lib-strip@
 libs\LibStub\LibStub.lua
@@ -40,7 +41,7 @@ libs\LibKeyBound-1.0\lib.xml
 libs\LibButtonGlow-1.0\LibButtonGlow-1.0.lua
 libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
 libs\LibWindow-1.1\LibWindow-1.1.lua
-libs\LibDualSpec-1.0\LibDualSpec-1.0.lua
+libs\LibDualSpec-1.0\LibDualSpec-1.0.lua [ExcludeLoadGameType vanilla]
 libs\LibDeflate\LibDeflate.lua
 libs\LibSerialize\LibSerialize.lua
 
@@ -61,11 +62,13 @@ libs\SimpleSticky.lua
 
 locale\locale.xml
 
+## Game Type bootstrap
+GameTypes.lua
+
 ## Core ##
 Bartender4.lua
 PerfPatchCheck.lua
 HideBlizzard.lua
-HideBlizzardClassic.lua
 
 ## Prototypes ##
 Bar.lua
@@ -80,7 +83,6 @@ PetButton.lua
 ActionBars.lua
 KeyBindCopy.lua
 BagBar.lua
-BagBarClassic.lua
 PetBar.lua
 StanceBar.lua
 MicroMenu.lua
@@ -119,5 +121,6 @@ Options\MultiCastBar.lua
 ArtBarTemplates.xml
 
 ## Presets -- needs to be the last ##
-Options\Presets.lua
-Options\PresetsClassic.lua
+Options\Presets.lua [AllowLoadGameType standard]
+Options\PresetsForever.lua [AllowLoadGameType camelot, forever][ExcludeLoadGameType classic, standard]
+Options\PresetsClassic.lua [AllowLoadGameType classic]
